@@ -57,7 +57,7 @@ header{
 .icon-btn.active{background:var(--cyan-dim);}
 .icon-btn.spinning{animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-main{display:grid;grid-template-columns:300px 1fr 320px;min-height:0;overflow:hidden;}
+main{display:grid;grid-template-columns:270px 1fr 250px 280px;min-height:0;overflow:hidden;}
 @media (max-width:1100px){main{grid-template-columns:1fr;overflow:auto;}.map-wrap{min-height:280px;}.outlook-strip{max-height:none;}}
 .panel{background:var(--bg-panel);border-right:1px solid var(--line);overflow:hidden;min-height:0;display:flex;flex-direction:column;}
 .panel-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;}
@@ -226,6 +226,28 @@ footer b{color:var(--text-mid);font-weight:500;}
         <div class="forecast-grid" id="forecast-grid"></div>
       </div>
     </section>
+    <!-- SPC + secondary alerts -->
+    <aside class="panel">
+      <div class="panel-scroll">
+        <div class="section">
+          <h3>SPC Day-1 Outlook <span class="badge" id="spc-badge">—</span></h3>
+          <div class="seg" id="spc-product-seg" style="margin-bottom:8px;">
+            <button type="button" data-spc="cat" class="active">Cat</button>
+            <button type="button" data-spc="torn">Tor</button>
+            <button type="button" data-spc="wind">Wind</button>
+            <button type="button" data-spc="hail">Hail</button>
+          </div>
+          <div id="spc-list"><div class="empty">Loading SPC…</div></div>
+          <p class="hint">Storm Prediction Center convective outlook. Click a risk to focus the map.</p>
+        </div>
+        <div class="section">
+          <h3>Advisories &amp; Outlooks <span class="badge" id="adv-badge">—</span></h3>
+          <div id="advisory-list"><div class="empty">Loading…</div></div>
+          <p class="hint">NWS statements, advisories, and hazardous weather outlooks for PA.</p>
+        </div>
+      </div>
+    </aside>
+
     <aside class="panel right">
       <div class="section">
         <h3>Schuylkill River · USGS</h3>
