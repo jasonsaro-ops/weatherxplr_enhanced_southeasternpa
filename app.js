@@ -265,13 +265,10 @@ function renderForecast(){
   const cur = periods[0];
   $('stat-temp').textContent = `${cur.temperature}°${cur.temperatureUnit || 'F'}`;
   $('current-obs').innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;">
-      <img src="${cur.icon}" alt="" width="52" height="52" style="border-radius:6px;" />
-      <div>
-        <div class="t">${esc(cur.name)} · ${cur.temperature}°${cur.temperatureUnit || 'F'}</div>
-        <div class="s">${esc(cur.shortForecast || '')}</div>
-        <div class="meta">Wind ${esc(cur.windSpeed || '—')} ${esc(cur.windDirection || '')}</div>
-      </div>
+    <img src="${cur.icon}" alt="" />
+    <div>
+      <div class="t" style="cursor:pointer;">${esc(cur.name)} · ${cur.temperature}°${cur.temperatureUnit || 'F'}</div>
+      <div class="s">${esc(cur.shortForecast || '')} · Wind ${esc(cur.windSpeed || '—')} ${esc(cur.windDirection || '')}</div>
     </div>`;
   $('current-obs').style.cursor = 'pointer';
   $('current-obs').onclick = ()=> openForecastModal(0);
