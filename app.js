@@ -43,19 +43,27 @@ const AQI_CATEGORY = {
 const BASEMAPS = {
   streets: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-    attr: '© Esri',
+    attr: 'Tiles © Esri',
+    maxZoom: 19,
+    maxNativeZoom: 19,
   },
   dark: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-    attr: '© Esri',
+    attr: 'Tiles © Esri',
+    maxZoom: 16,
+    maxNativeZoom: 16,
   },
   topo: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-    attr: '© Esri',
+    attr: 'Tiles © Esri',
+    maxZoom: 19,
+    maxNativeZoom: 19,
   },
   imagery: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attr: '© Esri',
+    attr: 'Tiles © Esri',
+    maxZoom: 19,
+    maxNativeZoom: 19,
   },
 };
 
@@ -216,6 +224,8 @@ function initMap(){
   map = L.map('leaflet-map', {
     center: [HOME_VIEW.lat, HOME_VIEW.lon],
     zoom: HOME_VIEW.zoom,
+    minZoom: 3,
+    maxZoom: 18,
     zoomControl: false,
   });
   setBasemap('streets');
@@ -235,9 +245,15 @@ function setBasemap(key){
   const def = BASEMAPS[key] || BASEMAPS.streets;
   if(baseTileLayer) map.removeLayer(baseTileLayer);
   baseTileLayer = L.tileLayer(def.url, {
-    maxZoom: 18,
+    maxZoom: def.maxZoom || 19,
+    maxNativeZoom: def.maxNativeZoom || def.maxZoom || 19,
     attribution: def.attr,
+    errorTileUrl: '',
   }).addTo(map);
+  // Keep map within what the active basemap can show
+  if(map.getZoom() > (def.maxZoom || 19)){
+    map.setZoom(def.maxZoom || 19);
+  }
   restack();
 }
 
@@ -321,8 +337,8 @@ function showRainViewerFrame(index){
   } else {
     rainViewerLayer = L.tileLayer(url, {
       opacity: 0.65,
-      maxZoom: 12,
-      maxNativeZoom: 10,
+      maxZoom: 19,
+      maxNativeZoom: 7,
       updateWhenIdle: true,
       attribution: 'Radar: RainViewer',
     }).addTo(map);
@@ -370,8 +386,8 @@ function setHrrrLayer(on){
   } else {
     hrrrTileLayer = L.tileLayer(url, {
       opacity: 0.55,
-      maxZoom: 10,
-      maxNativeZoom: 8,
+      maxZoom: 19,
+      maxNativeZoom: 7,
       updateWhenIdle: true,
       attribution: 'HRRR: NOAA / IEM',
     }).addTo(map);
@@ -397,8 +413,8 @@ function showNexradFrame(index){
   } else {
     nexradTileLayer = L.tileLayer(url, {
       opacity: 0.7,
-      maxZoom: 12,
-      maxNativeZoom: 10,
+      maxZoom: 19,
+      maxNativeZoom: 8,
       updateWhenIdle: true,
       updateWhenZooming: false,
       keepBuffer: 2,
