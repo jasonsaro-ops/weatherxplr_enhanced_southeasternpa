@@ -1,6 +1,10 @@
 /* WEATHERXPLR Enhanced — ZIP 19428
    NWS PA alerts · AirNow · USGS · NOAA tides · Esri + NEXRAD · SPC
 */
+
+const HOME_VIEW = { lat: 40.05, lon: -75.15, zoom: 9 };   // SE PA / Mount Holly NWS area
+const USA_VIEW  = { lat: 39.8, lon: -98.5, zoom: 4 };     // CONUS
+
 const CONFIG = {
   zip: '19428',
   lat: 40.0759,
@@ -160,13 +164,15 @@ function classifyAlertTone(p){
 /* Map */
 function initMap(){
   map = L.map('leaflet-map', {
-    center: [CONFIG.lat, CONFIG.lon],
-    zoom: 9,
-    zoomControl: true,
+    center: [HOME_VIEW.lat, HOME_VIEW.lon],
+    zoom: HOME_VIEW.zoom,
+    zoomControl: false,
   });
   setBasemap('streets');
   alertLayer.addTo(map);
   showNexradFrame(state.nexrad.frameIndex);
+  // NEXRAD animates by default
+  startNexradAnim();
 }
 
 function setBasemap(key){
@@ -460,10 +466,6 @@ async function fetchSpc(){
     if(!res.ok) throw new Error('SPC HTTP ' + res.status);
     const data = await res.json();
     state.spcFeatures = data.features || [];
-    // Auto-show on map when loading from column
-    state.showSpc = true;
-    const cb = $('layer-spc');
-    if(cb) cb.checked = true;
     renderSpc();
     renderSpcList();
   }catch(err){
@@ -512,11 +514,12 @@ function renderSpcList(){
           map.fitBounds(layer.getBounds().pad(0.15));
         }catch{}
       }
-      // ensure drawn
-      state.showSpc = true;
-      const cb = $('layer-spc');
-      if(cb) cb.checked = true;
-      renderSpc();
+      // Preview on map when user opens a risk card
+      if(!state.showSpc){
+        state.showSpc = true;
+        setSpcToggleUI(true);
+        renderSpc();
+      }
     });
   });
 }
@@ -776,6 +779,12 @@ function tickCountdown(){
   if(el) el.textContent = String(state.countdown);
 }
 
+function setSpcToggleUI(on){
+  state.showSpc = !!on;
+  $('spc-on')?.classList.toggle('active', state.showSpc);
+  $('spc-off')?.classList.toggle('active', !state.showSpc);
+}
+
 function wire(){
   $('modal-close')?.addEventListener('click', closeModal);
   $('modal-backdrop')?.addEventListener('click', e=>{ if(e.target === $('modal-backdrop')) closeModal(); });
@@ -805,10 +814,14 @@ function wire(){
     state.nexrad.frameIndex = state.nexrad.offsets.length - 1;
     showNexradFrame(state.nexrad.frameIndex);
   });
-  $('layer-spc')?.addEventListener('change', e=>{
-    state.showSpc = e.target.checked;
-    if(state.showSpc && !state.spcFeatures.length) fetchSpc();
+  $('spc-on')?.addEventListener('click', ()=>{
+    setSpcToggleUI(true);
+    if(!state.spcFeatures.length) fetchSpc();
     else renderSpc();
+  });
+  $('spc-off')?.addEventListener('click', ()=>{
+    setSpcToggleUI(false);
+    renderSpc();
   });
   $('spc-product-seg')?.addEventListener('click', e=>{
     const btn = e.target.closest('button[data-spc]');
@@ -816,8 +829,19 @@ function wire(){
     document.querySelectorAll('#spc-product-seg button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     state.spcProduct = btn.dataset.spc;
-    fetchSpc();
+    fetchSpc(); // loads data; map only shows if SPC On
   });
+  $('map-recenter')?.addEventListener('click', ()=>{
+    map.flyTo([HOME_VIEW.lat, HOME_VIEW.lon], HOME_VIEW.zoom, { duration: 0.7 });
+  });
+  $('map-reset')?.addEventListener('click', ()=>{
+    map.flyTo([HOME_VIEW.lat, HOME_VIEW.lon], HOME_VIEW.zoom, { duration: 0.7 });
+  });
+  $('map-usa')?.addEventListener('click', ()=>{
+    map.flyTo([USA_VIEW.lat, USA_VIEW.lon], USA_VIEW.zoom, { duration: 0.9 });
+  });
+  $('map-zoom-in')?.addEventListener('click', ()=> map.zoomIn());
+  $('map-zoom-out')?.addEventListener('click', ()=> map.zoomOut());
   $('layer-hrrr')?.addEventListener('change', e=>{
     setHrrrLayer(e.target.checked);
   });
@@ -828,7 +852,7 @@ function wire(){
     state.showAlertPoly = e.target.checked;
     renderAlertPolygons();
   });
-  $('map-recenter')?.addEventListener('click', ()=> map.flyTo([CONFIG.lat, CONFIG.lon], 9, { duration: 0.6 }));
+  
   document.addEventListener('click', ()=> ensureAudio(), { once: true });
 }
 
@@ -836,9 +860,7 @@ async function init(){
   wire();
   initMap();
   renderHydro();
-  state.showSpc = true;
-  const spcCb = $('layer-spc');
-  if(spcCb) spcCb.checked = true;
+  state.showSpc = false;
   setStatus('warn', 'Connecting');
   await softRefresh();
   setInterval(tickCountdown, 1000);
