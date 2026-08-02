@@ -74,7 +74,7 @@ const state = {
   },
 };
 
-let map, baseTileLayer, nexradTileLayer;
+let map, baseTileLayer, nexradTileLayer, hrrrTileLayer;
 const alertLayer = L.layerGroup();
 const spcLayer = L.layerGroup();
 
@@ -96,10 +96,17 @@ function openModal(title, sub, body){
   $('modal-title').textContent = title;
   $('modal-sub').textContent = sub || '';
   $('modal-body').innerHTML = body;
-  $('modal-backdrop').classList.add('open');
+  const bd = $('modal-backdrop');
+  // Keep modal above Leaflet map panes (which use high z-index)
+  bd.style.zIndex = '10000';
+  document.body.appendChild(bd);
+  bd.classList.add('open');
+  bd.setAttribute('aria-hidden', 'false');
 }
 function closeModal(){
-  $('modal-backdrop').classList.remove('open');
+  const bd = $('modal-backdrop');
+  bd.classList.remove('open');
+  bd.setAttribute('aria-hidden', 'true');
   $('modal-body').innerHTML = '';
 }
 
@@ -171,13 +178,44 @@ function setBasemap(key){
 }
 
 function restack(){
+  // Order: basemap → NEXRAD → HRRR → SPC → alert polygons
   if(nexradTileLayer && map.hasLayer(nexradTileLayer)){
     map.removeLayer(nexradTileLayer);
     nexradTileLayer.addTo(map);
   }
+  if(hrrrTileLayer && map.hasLayer(hrrrTileLayer)){
+    map.removeLayer(hrrrTileLayer);
+    hrrrTileLayer.addTo(map);
+  }
   [spcLayer, alertLayer].forEach(ly=>{
     if(map.hasLayer(ly)){ ly.remove(); ly.addTo(map); }
   });
+}
+
+function setHrrrLayer(on){
+  const sel = $('hrrr-product');
+  if(sel) sel.style.display = on ? '' : 'none';
+  if(!on){
+    if(hrrrTileLayer){
+      try{ map.removeLayer(hrrrTileLayer); }catch(_){}
+      hrrrTileLayer = null;
+    }
+    return;
+  }
+  const product = sel?.value || 'hrrr::REFC-F0000-0';
+  const url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${product}/{z}/{x}/{y}.png`;
+  if(hrrrTileLayer){
+    hrrrTileLayer.setUrl(url);
+  } else {
+    hrrrTileLayer = L.tileLayer(url, {
+      opacity: 0.55,
+      maxZoom: 10,
+      maxNativeZoom: 8,
+      updateWhenIdle: true,
+      attribution: 'HRRR: NOAA / IEM',
+    }).addTo(map);
+  }
+  restack();
 }
 
 function nexradUrl(product, offsetMin){
@@ -663,6 +701,12 @@ function wire(){
     state.showSpc = e.target.checked;
     if(state.showSpc && !state.spcFeatures.length) fetchSpc();
     else renderSpc();
+  });
+  $('layer-hrrr')?.addEventListener('change', e=>{
+    setHrrrLayer(e.target.checked);
+  });
+  $('hrrr-product')?.addEventListener('change', ()=>{
+    if($('layer-hrrr')?.checked) setHrrrLayer(true);
   });
   $('layer-alert-poly')?.addEventListener('change', e=>{
     state.showAlertPoly = e.target.checked;
