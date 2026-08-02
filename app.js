@@ -57,6 +57,8 @@ const state = {
   aqiForecast: [],
   aqiCache: {},
   spcFeatures: [],
+  spcProduct: 'cat', // cat | torn | wind | hail
+  advisoryAlerts: [],
   soundEnabled: false,
   knownAlertIds: new Set(),
   countdown: CONFIG.refreshSec,
@@ -316,7 +318,20 @@ async function fetchAlerts(){
     state.alerts = features;
     state.alertCache = {};
     features.forEach(f => { if(f.properties?.id) state.alertCache[f.properties.id] = f; });
+
+    // Split: primary watches/warnings vs advisories/statements/outlooks
+    const isAdvisory = (p)=>{
+      const ev = (p.event || '').toLowerCase();
+      const mt = (p.msgType || '').toLowerCase();
+      return /advisory|statement|outlook|air quality|special weather|hazardous weather|beach|frost|freeze|wind chill|heat index/.test(ev)
+        || mt === 'update' && /outlook|advisory/.test(ev);
+    };
+    state.advisoryAlerts = features.filter(f => isAdvisory(f.properties || {}));
+    // Primary list excludes pure advisories/outlooks (still filterable)
+    state.alertsPrimary = features.filter(f => !isAdvisory(f.properties || {}));
+
     renderAlerts();
+    renderAdvisories();
     renderAlertPolygons();
   }catch(err){
     console.error('Alerts', err);
@@ -324,8 +339,36 @@ async function fetchAlerts(){
   }
 }
 
+function renderAdvisories(){
+  const list = state.advisoryAlerts || [];
+  const badge = $('adv-badge');
+  if(badge){
+    badge.textContent = String(list.length);
+    badge.classList.toggle('hot', list.length > 0);
+  }
+  const host = $('advisory-list');
+  if(!host) return;
+  if(!list.length){
+    host.innerHTML = `<div class="empty ok">No active advisories / outlooks</div>`;
+    return;
+  }
+  host.innerHTML = list.map(f=>{
+    const p = f.properties || {};
+    const tone = classifyAlertTone(p);
+    return `<div class="card alert-card" data-alert-id="${esc(p.id || '')}">
+      <div class="ev ${tone}">${esc(p.event || 'Advisory')}</div>
+      <div class="s">${esc(p.headline || p.areaDesc || '')}</div>
+      <div class="meta">${esc((p.severity || '') + ' · ' + (p.urgency || ''))}</div>
+    </div>`;
+  }).join('');
+  host.querySelectorAll('[data-alert-id]').forEach(el=>{
+    el.addEventListener('click', ()=> openAlertModal(el.dataset.alertId));
+  });
+}
+
 function renderAlerts(){
-  const list = state.alerts.filter(f => matchesAlertFilter(f.properties || {}));
+  const source = state.alertsPrimary && state.alertsPrimary.length ? state.alertsPrimary : state.alerts;
+  const list = source.filter(f => matchesAlertFilter(f.properties || {}));
   $('stat-alerts').textContent = String(list.length);
   const badge = $('alerts-badge');
   badge.textContent = String(list.length);
@@ -399,20 +442,85 @@ function renderAlertPolygons(){
 }
 
 /* SPC Day-1 categorical outlook */
+const SPC_URLS = {
+  cat:  'https://www.spc.noaa.gov/products/outlook/day1otlk_cat.lyr.geojson',
+  torn: 'https://www.spc.noaa.gov/products/outlook/day1otlk_torn.lyr.geojson',
+  wind: 'https://www.spc.noaa.gov/products/outlook/day1otlk_wind.lyr.geojson',
+  hail: 'https://www.spc.noaa.gov/products/outlook/day1otlk_hail.lyr.geojson',
+};
+
 async function fetchSpc(){
+  const prod = state.spcProduct || 'cat';
+  const url = SPC_URLS[prod] || SPC_URLS.cat;
   try{
-    const res = await fetch('https://www.spc.noaa.gov/products/outlook/day1otlk_cat.lyr.geojson', {
+    const res = await fetch(url, {
       headers: { Accept: 'application/geo+json' },
       cache: 'no-cache',
     });
     if(!res.ok) throw new Error('SPC HTTP ' + res.status);
     const data = await res.json();
     state.spcFeatures = data.features || [];
+    // Auto-show on map when loading from column
+    state.showSpc = true;
+    const cb = $('layer-spc');
+    if(cb) cb.checked = true;
     renderSpc();
+    renderSpcList();
   }catch(err){
     console.error('SPC', err);
+    const host = $('spc-list');
+    if(host) host.innerHTML = `<div class="empty err">SPC unavailable</div>`;
   }
 }
+
+function renderSpcList(){
+  const host = $('spc-list');
+  const badge = $('spc-badge');
+  if(!host) return;
+  const feats = state.spcFeatures || [];
+  if(badge) badge.textContent = String(feats.length);
+  if(!feats.length){
+    host.innerHTML = `<div class="empty ok">No SPC risk areas</div>`;
+    return;
+  }
+  host.innerHTML = feats.map((f, i)=>{
+    const p = f.properties || {};
+    const fill = p.fill || '#55BB55';
+    return `<div class="card" data-spc-idx="${i}" style="border-left:3px solid ${fill}">
+      <div class="t" style="font-size:12px;font-weight:600;color:var(--text-hi)">${esc(p.LABEL2 || p.LABEL || 'Risk')}</div>
+      <div class="s">${esc(p.LABEL || '')} · DN ${p.DN ?? '—'}</div>
+      <div class="meta">Valid ${esc(p.VALID_ISO || p.VALID || '—')}</div>
+    </div>`;
+  }).join('');
+  host.querySelectorAll('[data-spc-idx]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const f = state.spcFeatures[Number(el.dataset.spcIdx)];
+      if(!f) return;
+      const p = f.properties || {};
+      openModal(p.LABEL2 || p.LABEL || 'SPC Day-1', p.FORECASTER || 'SPC', `
+        <div class="meta-kv"><span class="k">Risk</span><span class="v">${esc(p.LABEL2 || p.LABEL || '')}</span></div>
+        <div class="meta-kv"><span class="k">Label</span><span class="v">${esc(p.LABEL || '')}</span></div>
+        <div class="meta-kv"><span class="k">DN</span><span class="v">${p.DN ?? '—'}</span></div>
+        <div class="meta-kv"><span class="k">Issue</span><span class="v">${esc(p.ISSUE_ISO || p.ISSUE || '')}</span></div>
+        <div class="meta-kv"><span class="k">Valid</span><span class="v">${esc(p.VALID_ISO || p.VALID || '')}</span></div>
+        <div class="meta-kv"><span class="k">Expire</span><span class="v">${esc(p.EXPIRE_ISO || p.EXPIRE || '')}</span></div>
+        <div class="meta-kv"><span class="k">Forecaster</span><span class="v">${esc(p.FORECASTER || '—')}</span></div>
+      `);
+      if(f.geometry && map){
+        try{
+          const layer = L.geoJSON(f);
+          map.fitBounds(layer.getBounds().pad(0.15));
+        }catch{}
+      }
+      // ensure drawn
+      state.showSpc = true;
+      const cb = $('layer-spc');
+      if(cb) cb.checked = true;
+      renderSpc();
+    });
+  });
+}
+
 function renderSpc(){
   spcLayer.clearLayers();
   if(!state.showSpc){
@@ -441,6 +549,7 @@ function renderSpc(){
     }catch{}
   });
   restack();
+  renderSpcList();
 }
 
 /* Forecast */
@@ -647,8 +756,7 @@ async function softRefresh(){
   $('refresh-btn')?.classList.add('spinning');
   setStatus('warn', 'Syncing');
   try{
-    await Promise.all([fetchAlerts(), fetchForecast(), fetchAQI(), fetchTides()]);
-    if(state.showSpc) await fetchSpc();
+    await Promise.all([fetchAlerts(), fetchForecast(), fetchAQI(), fetchTides(), fetchSpc()]);
     if(nexradTileLayer) showNexradFrame(state.nexrad.frameIndex);
     setStatus('ok', 'Live');
   }catch{
@@ -702,6 +810,14 @@ function wire(){
     if(state.showSpc && !state.spcFeatures.length) fetchSpc();
     else renderSpc();
   });
+  $('spc-product-seg')?.addEventListener('click', e=>{
+    const btn = e.target.closest('button[data-spc]');
+    if(!btn) return;
+    document.querySelectorAll('#spc-product-seg button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.spcProduct = btn.dataset.spc;
+    fetchSpc();
+  });
   $('layer-hrrr')?.addEventListener('change', e=>{
     setHrrrLayer(e.target.checked);
   });
@@ -720,6 +836,9 @@ async function init(){
   wire();
   initMap();
   renderHydro();
+  state.showSpc = true;
+  const spcCb = $('layer-spc');
+  if(spcCb) spcCb.checked = true;
   setStatus('warn', 'Connecting');
   await softRefresh();
   setInterval(tickCountdown, 1000);
