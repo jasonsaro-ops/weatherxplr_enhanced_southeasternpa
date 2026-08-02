@@ -14,7 +14,14 @@ const CONFIG = {
   noaaStation: '8545240',
   refreshSec: 120,
   nwsUA: 'WEATHERXPLR-Enhanced/1.0 (dashboard; zip 19428)',
+  // Optional: OpenWeatherMap Maps 1.0 key for precipitation tiles
+  // https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid=KEY
+  openWeatherKey: '', // set your OWM key to enable OWM precip layer
 };
+
+// RainViewer public radar (no key) — https://www.rainviewer.com/api.html
+const RAINVIEWER_MAPS = 'https://api.rainviewer.com/public/weather-maps.json';
+
 
 const SCHUYLKILL_GAUGES = [
   { id: '01472000', name: 'Schuylkill River at Reading, PA' },
@@ -70,6 +77,8 @@ const state = {
   audioCtx: null,
   showAlertPoly: true,
   showSpc: false,
+  wind: null,
+  radarSource: 'rainviewer', // rainviewer | nexrad
   nexrad: {
     product: 'nexrad-n0q-900913',
     offsets: [50, 40, 30, 20, 10, 0],
@@ -78,9 +87,15 @@ const state = {
     speed: 1400,
     timer: null,
   },
+  rainViewer: {
+    host: 'https://tilecache.rainviewer.com',
+    frames: [], // {time, path}
+    frameIndex: 0,
+    loaded: false,
+  },
 };
 
-let map, baseTileLayer, nexradTileLayer, hrrrTileLayer;
+let map, baseTileLayer, nexradTileLayer, hrrrTileLayer, owmTileLayer, rainViewerLayer;
 const alertLayer = L.layerGroup();
 const spcLayer = L.layerGroup();
 
@@ -123,42 +138,77 @@ function ensureAudio(){
   }
   return state.audioCtx;
 }
+/** Alert chimes — synthesized in-browser (no audio files)
+ *  SEVERE: alternating wail 880↔660 Hz, sawtooth
+ *  LOCAL:  calm rising C5→G5, soft sine
+ *  ALL PA: short flat double-beep 440 Hz, triangle
+ */
 function playTone(kind){
   if(!state.soundEnabled) return;
   const ctx = ensureAudio();
   if(!ctx) return;
   if(ctx.state === 'suspended') ctx.resume().catch(()=>{});
-  const schemes = {
-    info:    { freqs:[660], dur:0.12, gap:0.08 },
-    watch:   { freqs:[880,660], dur:0.14, gap:0.1 },
-    warning: { freqs:[1040,780,1040], dur:0.12, gap:0.08 },
-    extreme: { freqs:[1240,980,1240], dur:0.16, gap:0.07 },
-  };
-  const sch = schemes[kind] || schemes.info;
   const now = ctx.currentTime;
-  sch.freqs.forEach((freq, i)=>{
-    const t0 = now + i * (sch.dur + sch.gap);
+
+  if(kind === 'severe'){
+    // Alternating wail 880 ↔ 660 Hz, sawtooth (edgiest)
+    const steps = [880, 660, 880, 660, 880];
+    steps.forEach((freq, i)=>{
+      const t0 = now + i * 0.14;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.13);
+    });
+    return;
+  }
+
+  if(kind === 'local'){
+    // Calm rising two-note chime C5 (523.25) → G5 (783.99), soft sine
+    const notes = [523.25, 783.99];
+    notes.forEach((freq, i)=>{
+      const t0 = now + i * 0.28;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.2, t0 + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.35);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.38);
+    });
+    return;
+  }
+
+  // ALL PA — short flat double-beep 440 Hz triangle (neutral)
+  [0, 0.16].forEach((delay)=>{
+    const t0 = now + delay;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, t0);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(440, t0);
     gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + sch.dur);
+    gain.gain.exponentialRampToValueAtTime(0.2, t0 + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.1);
     osc.connect(gain).connect(ctx.destination);
     osc.start(t0);
-    osc.stop(t0 + sch.dur + 0.02);
+    osc.stop(t0 + 0.11);
   });
 }
+
+/** Map an alert to SEVERE / LOCAL / ALL chime */
 function classifyAlertTone(p){
-  const event = (p.event || '').toLowerCase();
-  const sev = (p.severity || '').toLowerCase();
-  const urg = (p.urgency || '').toLowerCase();
-  if(sev === 'extreme' || urg === 'immediate' || (/warning/.test(event) && /tornado|flash flood|hurricane|tsunami/.test(event)))
-    return 'extreme';
-  if(sev === 'severe' || /warning/.test(event)) return 'warning';
-  if(/watch/.test(event) || sev === 'moderate') return 'watch';
-  return 'info';
+  if(isSevereAlert(p)) return 'severe';
+  if(isLocalAlert(p)) return 'local';
+  return 'all';
 }
 
 /* Map */
@@ -170,9 +220,15 @@ function initMap(){
   });
   setBasemap('streets');
   alertLayer.addTo(map);
-  showNexradFrame(state.nexrad.frameIndex);
-  // NEXRAD animates by default
-  startNexradAnim();
+  // RainViewer radar (no API key) — load frames + play loop
+  ensureRainViewer()
+    .then(()=> startNexradAnim())
+    .catch(err=>{
+      console.error('RainViewer failed, falling back to NEXRAD', err);
+      state.radarSource = 'nexrad';
+      showNexradFrame(state.nexrad.frameIndex);
+      startNexradAnim();
+    });
 }
 
 function setBasemap(key){
@@ -195,9 +251,106 @@ function restack(){
     map.removeLayer(hrrrTileLayer);
     hrrrTileLayer.addTo(map);
   }
+  if(owmTileLayer && map.hasLayer(owmTileLayer)){
+    map.removeLayer(owmTileLayer);
+    owmTileLayer.addTo(map);
+  }
+  if(rainViewerLayer && map.hasLayer(rainViewerLayer)){
+    map.removeLayer(rainViewerLayer);
+    rainViewerLayer.addTo(map);
+  }
   [spcLayer, alertLayer].forEach(ly=>{
     if(map.hasLayer(ly)){ ly.remove(); ly.addTo(map); }
   });
+}
+
+function setOwmPrecipLayer(on){
+  if(!on){
+    if(owmTileLayer){ try{ map.removeLayer(owmTileLayer); }catch(_){ } owmTileLayer = null; }
+    return;
+  }
+  const key = CONFIG.openWeatherKey;
+  if(!key){
+    alert('Set CONFIG.openWeatherKey in app.js to enable OpenWeatherMap precipitation tiles.\n\nURL pattern:\nhttps://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=YOUR_KEY');
+    const cb = $('layer-owm');
+    if(cb) cb.checked = false;
+    return;
+  }
+  const url = `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${key}`;
+  if(owmTileLayer){
+    owmTileLayer.setUrl(url);
+  } else {
+    owmTileLayer = L.tileLayer(url, {
+      opacity: 0.55,
+      maxZoom: 12,
+      attribution: '© OpenWeatherMap',
+    }).addTo(map);
+  }
+  restack();
+}
+
+async function loadRainViewerFrames(){
+  const res = await fetch(RAINVIEWER_MAPS, { cache: 'no-cache' });
+  if(!res.ok) throw new Error('RainViewer HTTP ' + res.status);
+  const data = await res.json();
+  const past = data?.radar?.past || [];
+  const nowcast = data?.radar?.nowcast || [];
+  state.rainViewer.host = data.host || 'https://tilecache.rainviewer.com';
+  state.rainViewer.frames = past.concat(nowcast);
+  state.rainViewer.frameIndex = Math.max(0, state.rainViewer.frames.length - 1);
+  state.rainViewer.loaded = true;
+  return state.rainViewer.frames;
+}
+
+function rainViewerTileUrl(frame){
+  // Public API: {host}{path}/256/{z}/{x}/{y}/{color}/{options}.png
+  // color 2 = universal, options 1_1 = smooth + snow
+  const host = state.rainViewer.host;
+  return `${host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+}
+
+function showRainViewerFrame(index){
+  const frames = state.rainViewer.frames;
+  if(!frames.length) return;
+  const i = ((index % frames.length) + frames.length) % frames.length;
+  state.rainViewer.frameIndex = i;
+  const frame = frames[i];
+  const url = rainViewerTileUrl(frame);
+  if(rainViewerLayer){
+    rainViewerLayer.setUrl(url);
+  } else {
+    rainViewerLayer = L.tileLayer(url, {
+      opacity: 0.65,
+      maxZoom: 12,
+      maxNativeZoom: 10,
+      updateWhenIdle: true,
+      attribution: 'Radar: RainViewer',
+    }).addTo(map);
+  }
+  // Hide NEXRAD while RainViewer is active
+  if(nexradTileLayer && map.hasLayer(nexradTileLayer)){
+    try{ map.removeLayer(nexradTileLayer); }catch(_){}
+  }
+  restack();
+  const el = $('nexrad-frame-label');
+  if(el){
+    const ageMin = Math.max(0, Math.round((Date.now()/1000 - frame.time) / 60));
+    el.textContent = ageMin <= 2 ? 'RainViewer: live' : `RainViewer: −${ageMin} min`;
+  }
+}
+
+async function ensureRainViewer(){
+  if(!state.rainViewer.loaded || !state.rainViewer.frames.length){
+    await loadRainViewerFrames();
+  }
+  showRainViewerFrame(state.rainViewer.frameIndex);
+}
+
+function clearRainViewer(){
+  if(rainViewerLayer){
+    try{ map.removeLayer(rainViewerLayer); }catch(_){}
+    rainViewerLayer = null;
+  }
 }
 
 function setHrrrLayer(on){
@@ -262,7 +415,13 @@ function startNexradAnim(){
   state.nexrad.playing = true;
   $('nexrad-play')?.classList.add('active');
   $('nexrad-pause')?.classList.remove('active');
-  const tick = ()=> showNexradFrame(state.nexrad.frameIndex + 1);
+  const tick = ()=>{
+    if(state.radarSource === 'rainviewer'){
+      showRainViewerFrame(state.rainViewer.frameIndex + 1);
+    } else {
+      showNexradFrame(state.nexrad.frameIndex + 1);
+    }
+  };
   tick();
   state.nexrad.timer = setInterval(tick, state.nexrad.speed);
 }
@@ -271,6 +430,29 @@ function stopNexradAnim(){
   if(state.nexrad.timer){ clearInterval(state.nexrad.timer); state.nexrad.timer = null; }
   $('nexrad-play')?.classList.remove('active');
   $('nexrad-pause')?.classList.add('active');
+}
+
+async function setRadarSource(src){
+  state.radarSource = src;
+  document.querySelectorAll('#radar-source-seg button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.radar === src);
+  });
+  const prod = $('nexrad-product');
+  if(prod) prod.style.display = src === 'nexrad' ? '' : 'none';
+
+  const wasPlaying = state.nexrad.playing;
+  stopNexradAnim();
+
+  if(src === 'rainviewer'){
+    if(nexradTileLayer && map.hasLayer(nexradTileLayer)){
+      try{ map.removeLayer(nexradTileLayer); }catch(_){}
+    }
+    await ensureRainViewer();
+  } else {
+    clearRainViewer();
+    showNexradFrame(state.nexrad.frameIndex);
+  }
+  if(wasPlaying) startNexradAnim();
 }
 
 /* NWS Alerts — statewide PA via area=PA */
@@ -361,8 +543,9 @@ function renderAdvisories(){
   host.innerHTML = list.map(f=>{
     const p = f.properties || {};
     const tone = classifyAlertTone(p);
+    const evClass = tone === 'severe' ? 'warning' : tone === 'local' ? 'watch' : '';
     return `<div class="card alert-card" data-alert-id="${esc(p.id || '')}">
-      <div class="ev ${tone}">${esc(p.event || 'Advisory')}</div>
+      <div class="ev ${evClass}">${esc(p.event || 'Advisory')}</div>
       <div class="s">${esc(p.headline || p.areaDesc || '')}</div>
       <div class="meta">${esc((p.severity || '') + ' · ' + (p.urgency || ''))}</div>
     </div>`;
@@ -387,10 +570,10 @@ function renderAlerts(){
   $('alerts-list').innerHTML = list.map(f=>{
     const p = f.properties || {};
     const tone = classifyAlertTone(p);
-    const sevClass = (tone === 'extreme' || tone === 'warning') ? 'sev-warning' :
-      tone === 'watch' ? 'sev-watch' : '';
+    const sevClass = tone === 'severe' ? 'sev-warning' : tone === 'local' ? 'sev-watch' : '';
+    const evClass = tone === 'severe' ? 'warning' : tone === 'local' ? 'watch' : '';
     return `<div class="card alert-card ${sevClass}" data-alert-id="${esc(p.id || '')}">
-      <div class="ev ${tone}">${esc(p.event || 'Alert')}</div>
+      <div class="ev ${evClass}">${esc(p.event || 'Alert')}</div>
       <div class="s">${esc(p.headline || p.areaDesc || '')}</div>
       <div class="meta">${esc((p.severity || '') + ' · ' + (p.urgency || ''))}</div>
     </div>`;
@@ -405,8 +588,8 @@ function openAlertModal(id){
   const p = f?.properties;
   if(!p) return;
   const tone = classifyAlertTone(p);
-  const color = (tone === 'extreme' || tone === 'warning') ? 'var(--red)' :
-    tone === 'watch' ? 'var(--amber)' : 'var(--cyan)';
+  const color = tone === 'severe' ? 'var(--red)' :
+    tone === 'local' ? 'var(--amber)' : 'var(--cyan)';
   openModal(p.event || 'NWS Alert', `${p.severity || ''} · ${p.urgency || ''}`, `
     <span class="tag" style="background:${color}33;color:${color}">${esc(p.severity || '—')}</span>
     <span class="tag" style="background:var(--cyan-dim);color:var(--cyan)">${esc(p.msgType || p.status || '')}</span>
@@ -691,6 +874,76 @@ function aqiDetail(p, prof){
     <div class="block">${esc(prof.message)}</div>`;
 }
 
+/* Wind — Open-Meteo (no API key) */
+function degToCompass(deg){
+  if(deg == null || Number.isNaN(Number(deg))) return '—';
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(((Number(deg) % 360) / 22.5)) % 16];
+}
+
+async function fetchWind(){
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=wind_speed_10m,wind_gusts_10m&wind_speed_unit=mph&forecast_days=1`;
+  try{
+    const res = await fetch(url, { cache: 'no-cache' });
+    if(!res.ok) throw new Error('Open-Meteo HTTP ' + res.status);
+    const data = await res.json();
+    state.wind = data;
+    renderWind();
+    // Map marker for local wind
+    updateWindMarker(data.current);
+  }catch(err){
+    console.error('Wind', err);
+    const host = $('wind-panel');
+    if(host) host.innerHTML = `<div class="empty err">Wind data unavailable</div>`;
+  }
+}
+
+function renderWind(){
+  const cur = state.wind?.current;
+  const host = $('wind-panel');
+  if(!cur || !host){
+    if(host) host.innerHTML = `<div class="empty">No wind data</div>`;
+    return;
+  }
+  const spd = cur.wind_speed_10m;
+  const gst = cur.wind_gusts_10m;
+  const dir = cur.wind_direction_10m;
+  const compass = degToCompass(dir);
+  $('stat-wind').textContent = spd != null ? `${Math.round(spd)}` : '—';
+
+  host.innerHTML = `
+    <div class="wind-card">
+      <div class="wind-metric"><div class="v">${spd != null ? Math.round(spd) : '—'}<span style="font-size:11px;color:var(--text-dim)"> mph</span></div><div class="k">Speed</div></div>
+      <div class="wind-metric"><div class="v">${gst != null ? Math.round(gst) : '—'}<span style="font-size:11px;color:var(--text-dim)"> mph</span></div><div class="k">Gusts</div></div>
+    </div>
+    <div class="wind-dir">
+      <span class="wind-arrow" style="transform:rotate(${(dir ?? 0) + 180}deg)">↑</span>
+      <span><b style="color:var(--text-hi)">${compass}</b> · ${dir != null ? Math.round(dir) + '°' : '—'}</span>
+    </div>
+    <p class="hint">10 m wind · Open-Meteo · ${esc(cur.time || '')}</p>`;
+}
+
+let windMarker = null;
+function updateWindMarker(cur){
+  if(!map || !cur) return;
+  const spd = cur.wind_speed_10m;
+  const dir = cur.wind_direction_10m;
+  const compass = degToCompass(dir);
+  const html = `<div style="background:rgba(11,15,22,.92);border:1px solid #2a3548;border-radius:8px;padding:6px 8px;color:#eef2f8;font:11px Inter,sans-serif;white-space:nowrap;">
+    <div style="color:#4fd1c5;font-weight:700;">${spd != null ? Math.round(spd) : '—'} mph ${compass}</div>
+    <div style="color:#8b96ab;font-size:10px;">Gust ${cur.wind_gusts_10m != null ? Math.round(cur.wind_gusts_10m) : '—'} · 19428</div>
+  </div>`;
+  if(windMarker){
+    windMarker.setLatLng([CONFIG.lat, CONFIG.lon]);
+    windMarker.setIcon(L.divIcon({ className: '', html, iconSize: [120, 40], iconAnchor: [60, 40] }));
+  } else {
+    windMarker = L.marker([CONFIG.lat, CONFIG.lon], {
+      icon: L.divIcon({ className: '', html, iconSize: [120, 40], iconAnchor: [60, 40] }),
+      interactive: false,
+    }).addTo(map);
+  }
+}
+
 /* USGS + NOAA */
 function renderHydro(){
   $('hydro-list').innerHTML = SCHUYLKILL_GAUGES.map(g=>`
@@ -759,8 +1012,15 @@ async function softRefresh(){
   $('refresh-btn')?.classList.add('spinning');
   setStatus('warn', 'Syncing');
   try{
-    await Promise.all([fetchAlerts(), fetchForecast(), fetchAQI(), fetchTides(), fetchSpc()]);
-    if(nexradTileLayer) showNexradFrame(state.nexrad.frameIndex);
+    await Promise.all([fetchAlerts(), fetchForecast(), fetchAQI(), fetchWind(), fetchTides(), fetchSpc()]);
+    if(state.radarSource === 'rainviewer'){
+      try{
+        await loadRainViewerFrames();
+        showRainViewerFrame(state.rainViewer.frameIndex);
+      }catch(e){ console.warn(e); }
+    } else if(nexradTileLayer){
+      showNexradFrame(state.nexrad.frameIndex);
+    }
     setStatus('ok', 'Live');
   }catch{
     setStatus('err', 'Partial');
@@ -777,6 +1037,12 @@ function tickCountdown(){
   }
   const el = $('countdown');
   if(el) el.textContent = String(state.countdown);
+}
+
+function setAlertOverlayUI(on){
+  state.showAlertPoly = !!on;
+  $('alerts-on')?.classList.toggle('active', state.showAlertPoly);
+  $('alerts-off')?.classList.toggle('active', !state.showAlertPoly);
 }
 
 function setSpcToggleUI(on){
@@ -796,7 +1062,7 @@ function wire(){
     const btn = $('sound-btn');
     btn.textContent = state.soundEnabled ? '🔊' : '🔇';
     btn.classList.toggle('active', state.soundEnabled);
-    if(state.soundEnabled) playTone('watch');
+    if(state.soundEnabled) playTone('local');
   });
   $('alert-filter-seg')?.addEventListener('click', e=>{
     const btn = e.target.closest('button[data-af]');
@@ -845,11 +1111,20 @@ function wire(){
   $('layer-hrrr')?.addEventListener('change', e=>{
     setHrrrLayer(e.target.checked);
   });
+  $('radar-source-seg')?.addEventListener('click', e=>{
+    const btn = e.target.closest('button[data-radar]');
+    if(!btn) return;
+    setRadarSource(btn.dataset.radar);
+  });
   $('hrrr-product')?.addEventListener('change', ()=>{
     if($('layer-hrrr')?.checked) setHrrrLayer(true);
   });
-  $('layer-alert-poly')?.addEventListener('change', e=>{
-    state.showAlertPoly = e.target.checked;
+  $('alerts-on')?.addEventListener('click', ()=>{
+    setAlertOverlayUI(true);
+    renderAlertPolygons();
+  });
+  $('alerts-off')?.addEventListener('click', ()=>{
+    setAlertOverlayUI(false);
     renderAlertPolygons();
   });
   
