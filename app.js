@@ -1,7 +1,6 @@
-/* WEATHERXPLR Enhanced — ZIP 19428 (Conshohocken, PA)
-   Data: NWS alerts/forecast · AirNow AQI · USGS Schuylkill · NOAA tides · Windy
+/* WEATHERXPLR Enhanced — ZIP 19428
+   NWS PA alerts · AirNow · USGS · NOAA tides · Esri + NEXRAD · SPC
 */
-
 const CONFIG = {
   zip: '19428',
   lat: 40.0759,
@@ -10,86 +9,117 @@ const CONFIG = {
   airNowKey: 'E5AFEF36-80F6-4A42-AE38-F3C56E3AEAC4',
   noaaStation: '8545240',
   refreshSec: 120,
-  nwsUserAgent: 'WEATHERXPLR-Enhanced/1.0 (local dashboard; 19428)',
+  nwsUA: 'WEATHERXPLR-Enhanced/1.0 (dashboard; zip 19428)',
 };
 
 const SCHUYLKILL_GAUGES = [
-  { id: '01472000', name: 'Schuylkill River at Reading, PA', lat: 40.3323, lon: -75.9324 },
-  { id: '01473500', name: 'Schuylkill River at Pottstown, PA', lat: 40.2429, lon: -75.6605 },
-  { id: '01474500', name: 'Schuylkill River at Norriton, PA', lat: 40.1118, lon: -75.3532 },
-  { id: '01474703', name: 'Schuylkill River at Conshohocken, PA', lat: 40.0712, lon: -75.3093 },
-  { id: '01474000', name: 'Schuylkill River at Philadelphia, PA (Fairmount Dam)', lat: 39.9676, lon: -75.1832 },
+  { id: '01472000', name: 'Schuylkill River at Reading, PA' },
+  { id: '01473500', name: 'Schuylkill River at Pottstown, PA' },
+  { id: '01474500', name: 'Schuylkill River at Norriton, PA' },
+  { id: '01474703', name: 'Schuylkill River at Conshohocken, PA' },
+  { id: '01474000', name: 'Schuylkill River at Philadelphia, PA (Fairmount Dam)' },
 ];
 
 const AQI_CATEGORY = {
   1: { label: 'Good', color: '#00e400', message: 'Air quality is satisfactory; little or no risk.' },
-  2: { label: 'Moderate', color: '#ffff00', message: 'Acceptable. Unusually sensitive people should limit prolonged outdoor exertion.' },
+  2: { label: 'Moderate', color: '#ffff00', message: 'Acceptable. Sensitive people should limit prolonged outdoor exertion.' },
   3: { label: 'Unhealthy SG', color: '#ff7e00', message: 'Sensitive groups may experience health effects.' },
   4: { label: 'Unhealthy', color: '#ff0000', message: 'Everyone may begin to experience health effects.' },
-  5: { label: 'Very Unhealthy', color: '#8f3f97', message: 'Health alert: everyone may experience more serious effects.' },
-  6: { label: 'Hazardous', color: '#7e0023', message: 'Emergency conditions. Entire population is more likely to be affected.' },
+  5: { label: 'Very Unhealthy', color: '#8f3f97', message: 'Health alert: more serious effects possible.' },
+  6: { label: 'Hazardous', color: '#7e0023', message: 'Emergency conditions for the entire population.' },
+};
+
+const BASEMAPS = {
+  streets: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attr: '© Esri',
+  },
+  dark: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attr: '© Esri',
+  },
+  topo: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    attr: '© Esri',
+  },
+  imagery: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attr: '© Esri',
+  },
 };
 
 const state = {
   alerts: [],
-  alertFilter: 'all', // all | local | severe
+  alertFilter: 'all',
   alertCache: {},
   forecast: [],
   aqiCurrent: [],
   aqiForecast: [],
   aqiCache: {},
+  spcFeatures: [],
   soundEnabled: false,
   knownAlertIds: new Set(),
   countdown: CONFIG.refreshSec,
   tideChart: null,
   audioCtx: null,
+  showAlertPoly: true,
+  showSpc: false,
+  nexrad: {
+    product: 'nexrad-n0q-900913',
+    offsets: [50, 40, 30, 20, 10, 0],
+    frameIndex: 5,
+    playing: false,
+    speed: 1400,
+    timer: null,
+  },
 };
 
-/* ---------- UI helpers ---------- */
-function $(id){ return document.getElementById(id); }
+let map, baseTileLayer, nexradTileLayer;
+const alertLayer = L.layerGroup();
+const spcLayer = L.layerGroup();
 
+function $(id){ return document.getElementById(id); }
+function esc(s){
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtTime(iso){
+  if(!iso) return '—';
+  try { return new Date(iso).toLocaleString(); } catch { return String(iso); }
+}
 function setStatus(kind, text){
   const el = $('api-status');
   if(!el) return;
   el.className = 'status-pill' + (kind ? ' ' + kind : '');
   $('api-status-text').textContent = text;
 }
-
-function openModal(title, sub, bodyHtml){
+function openModal(title, sub, body){
   $('modal-title').textContent = title;
   $('modal-sub').textContent = sub || '';
-  $('modal-body').innerHTML = bodyHtml;
+  $('modal-body').innerHTML = body;
   $('modal-backdrop').classList.add('open');
-  $('modal-backdrop').setAttribute('aria-hidden', 'false');
 }
-
 function closeModal(){
   $('modal-backdrop').classList.remove('open');
-  $('modal-backdrop').setAttribute('aria-hidden', 'true');
   $('modal-body').innerHTML = '';
 }
 
-/* ---------- Alert tones (watch / warning / extreme) ---------- */
+/* Audio tones */
 function ensureAudio(){
   if(!state.audioCtx){
-    try{ state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-    catch(_){ /* ignore */ }
+    try { state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
   }
   return state.audioCtx;
 }
-
 function playTone(kind){
   if(!state.soundEnabled) return;
   const ctx = ensureAudio();
   if(!ctx) return;
   if(ctx.state === 'suspended') ctx.resume().catch(()=>{});
-
-  // Distinct multi-tone schemes (kHz-ish bands)
   const schemes = {
-    info:    { freqs: [660], dur: 0.12, gap: 0.08 },
-    watch:   { freqs: [880, 660], dur: 0.14, gap: 0.1 },
-    warning: { freqs: [1040, 780, 1040], dur: 0.12, gap: 0.08 },
-    extreme: { freqs: [1240, 980, 1240], dur: 0.16, gap: 0.07 },
+    info:    { freqs:[660], dur:0.12, gap:0.08 },
+    watch:   { freqs:[880,660], dur:0.14, gap:0.1 },
+    warning: { freqs:[1040,780,1040], dur:0.12, gap:0.08 },
+    extreme: { freqs:[1240,980,1240], dur:0.16, gap:0.07 },
   };
   const sch = schemes[kind] || schemes.info;
   const now = ctx.currentTime;
@@ -107,66 +137,135 @@ function playTone(kind){
     osc.stop(t0 + sch.dur + 0.02);
   });
 }
-
-function classifyAlertTone(props){
-  const event = (props.event || '').toLowerCase();
-  const sev = (props.severity || '').toLowerCase();
-  const urgency = (props.urgency || '').toLowerCase();
-  if(
-    sev === 'extreme' ||
-    urgency === 'immediate' ||
-    (/warning/.test(event) && /tornado|flash flood|hurricane|tsunami|extreme/.test(event))
-  ) return 'extreme';
+function classifyAlertTone(p){
+  const event = (p.event || '').toLowerCase();
+  const sev = (p.severity || '').toLowerCase();
+  const urg = (p.urgency || '').toLowerCase();
+  if(sev === 'extreme' || urg === 'immediate' || (/warning/.test(event) && /tornado|flash flood|hurricane|tsunami/.test(event)))
+    return 'extreme';
   if(sev === 'severe' || /warning/.test(event)) return 'warning';
   if(/watch/.test(event) || sev === 'moderate') return 'watch';
   return 'info';
 }
 
-/* ---------- NWS Alerts ---------- */
-function isLocalAlert(props){
-  const area = (props.areaDesc || '').toLowerCase();
-  // Montgomery County + nearby counties for 19428
-  return /montgomery|philadelphia|chester|delaware|bucks|conshohocken|norristown|king of prussia/.test(area);
+/* Map */
+function initMap(){
+  map = L.map('leaflet-map', {
+    center: [CONFIG.lat, CONFIG.lon],
+    zoom: 9,
+    zoomControl: true,
+  });
+  setBasemap('streets');
+  alertLayer.addTo(map);
+  showNexradFrame(state.nexrad.frameIndex);
 }
 
-function isSevereAlert(props){
-  const event = (props.event || '').toLowerCase();
-  const sev = (props.severity || '').toLowerCase();
+function setBasemap(key){
+  const def = BASEMAPS[key] || BASEMAPS.streets;
+  if(baseTileLayer) map.removeLayer(baseTileLayer);
+  baseTileLayer = L.tileLayer(def.url, {
+    maxZoom: 18,
+    attribution: def.attr,
+  }).addTo(map);
+  restack();
+}
+
+function restack(){
+  if(nexradTileLayer && map.hasLayer(nexradTileLayer)){
+    map.removeLayer(nexradTileLayer);
+    nexradTileLayer.addTo(map);
+  }
+  [spcLayer, alertLayer].forEach(ly=>{
+    if(map.hasLayer(ly)){ ly.remove(); ly.addTo(map); }
+  });
+}
+
+function nexradUrl(product, offsetMin){
+  let id = product;
+  if(offsetMin && !product.startsWith('q2-')) id = `${product}-m${offsetMin}m`;
+  return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${id}/{z}/{x}/{y}.png`;
+}
+
+function showNexradFrame(index){
+  const anim = state.nexrad;
+  anim.frameIndex = ((index % anim.offsets.length) + anim.offsets.length) % anim.offsets.length;
+  const offset = anim.offsets[anim.frameIndex];
+  const product = $('nexrad-product')?.value || anim.product;
+  anim.product = product;
+  const url = nexradUrl(product, offset);
+  if(nexradTileLayer){
+    nexradTileLayer.setUrl(url);
+  } else {
+    nexradTileLayer = L.tileLayer(url, {
+      opacity: 0.7,
+      maxZoom: 12,
+      maxNativeZoom: 10,
+      updateWhenIdle: true,
+      updateWhenZooming: false,
+      keepBuffer: 2,
+      attribution: 'Radar: IEM / NEXRAD',
+    }).addTo(map);
+  }
+  restack();
+  const el = $('nexrad-frame-label');
+  if(el) el.textContent = offset === 0 ? 'Radar: live' : `Radar: −${offset} min`;
+}
+
+function startNexradAnim(){
+  stopNexradAnim();
+  state.nexrad.playing = true;
+  $('nexrad-play')?.classList.add('active');
+  $('nexrad-pause')?.classList.remove('active');
+  const tick = ()=> showNexradFrame(state.nexrad.frameIndex + 1);
+  tick();
+  state.nexrad.timer = setInterval(tick, state.nexrad.speed);
+}
+function stopNexradAnim(){
+  state.nexrad.playing = false;
+  if(state.nexrad.timer){ clearInterval(state.nexrad.timer); state.nexrad.timer = null; }
+  $('nexrad-play')?.classList.remove('active');
+  $('nexrad-pause')?.classList.add('active');
+}
+
+/* NWS Alerts — statewide PA via area=PA */
+function isLocalAlert(p){
+  const area = (p.areaDesc || '').toLowerCase();
+  return /montgomery|philadelphia|chester|delaware|bucks|conshohocken|norristown|king of prussia|berks/.test(area);
+}
+function isSevereAlert(p){
+  const event = (p.event || '').toLowerCase();
+  const sev = (p.severity || '').toLowerCase();
   return sev === 'extreme' || sev === 'severe' ||
     /warning|tornado|flash flood|severe thunderstorm|winter storm/.test(event);
 }
-
-function matchesAlertFilter(props){
-  if(state.alertFilter === 'local') return isLocalAlert(props);
-  if(state.alertFilter === 'severe') return isSevereAlert(props);
+function matchesAlertFilter(p){
+  if(state.alertFilter === 'local') return isLocalAlert(p);
+  if(state.alertFilter === 'severe') return isSevereAlert(p);
   return true;
 }
 
 async function fetchAlerts(){
   try{
-    const res = await fetch('https://api.weather.gov/alerts/active', {
-      headers: { Accept: 'application/geo+json', 'User-Agent': CONFIG.nwsUserAgent },
+    // Statewide PA — reliable, smaller payload than national dump
+    const res = await fetch('https://api.weather.gov/alerts/active?area=PA', {
+      headers: {
+        Accept: 'application/geo+json',
+        'User-Agent': CONFIG.nwsUA,
+      },
       cache: 'no-cache',
     });
-    if(!res.ok) throw new Error('HTTP ' + res.status);
+    if(!res.ok) throw new Error('NWS HTTP ' + res.status);
     const data = await res.json();
-    const all = data.features || [];
+    const features = data.features || [];
 
-    // Prefer PA, keep national severe that might affect region
-    const pa = all.filter(f=>{
-      const area = f.properties?.areaDesc || '';
-      return /\bPA\b|Pennsylvania/i.test(area);
-    });
-
-    // New-alert tones
     const prev = state.knownAlertIds;
     if(prev.size > 0){
-      const newcomers = pa.filter(f=>{
+      const newcomers = features.filter(f=>{
         const id = f.properties?.id;
         return id && !prev.has(id) && matchesAlertFilter(f.properties || {});
       });
       if(newcomers.length){
-        const rank = { info: 0, watch: 1, warning: 2, extreme: 3 };
+        const rank = { info:0, watch:1, warning:2, extreme:3 };
         let best = 'info';
         newcomers.forEach(f=>{
           const k = classifyAlertTone(f.properties || {});
@@ -175,14 +274,15 @@ async function fetchAlerts(){
         playTone(best);
       }
     }
-    state.knownAlertIds = new Set(pa.map(f => f.properties?.id).filter(Boolean));
-    state.alerts = pa;
+    state.knownAlertIds = new Set(features.map(f => f.properties?.id).filter(Boolean));
+    state.alerts = features;
     state.alertCache = {};
-    pa.forEach(f => { if(f.properties?.id) state.alertCache[f.properties.id] = f.properties; });
+    features.forEach(f => { if(f.properties?.id) state.alertCache[f.properties.id] = f; });
     renderAlerts();
+    renderAlertPolygons();
   }catch(err){
     console.error('Alerts', err);
-    $('alerts-list').innerHTML = `<div class="empty err">Alerts unreachable</div>`;
+    $('alerts-list').innerHTML = `<div class="empty err">Alerts unreachable: ${esc(err.message)}</div>`;
   }
 }
 
@@ -194,39 +294,36 @@ function renderAlerts(){
   badge.classList.toggle('hot', list.length > 0);
 
   if(!list.length){
-    $('alerts-list').innerHTML = `<div class="empty ok">No matching active alerts</div>`;
+    $('alerts-list').innerHTML = `<div class="empty ok">No matching PA alerts</div>`;
     return;
   }
-
   $('alerts-list').innerHTML = list.map(f=>{
     const p = f.properties || {};
     const tone = classifyAlertTone(p);
-    const sevClass = tone === 'extreme' || tone === 'warning' ? 'sev-warning' :
+    const sevClass = (tone === 'extreme' || tone === 'warning') ? 'sev-warning' :
       tone === 'watch' ? 'sev-watch' : '';
-    const id = p.id || '';
-    return `
-      <div class="card alert-card ${sevClass}" data-alert-id="${id}">
-        <div class="ev ${tone}">${esc(p.event || 'Alert')}</div>
-        <div class="s">${esc(p.headline || p.areaDesc || '')}</div>
-        <div class="meta">${esc((p.severity || '') + ' · ' + (p.urgency || ''))}</div>
-      </div>`;
+    return `<div class="card alert-card ${sevClass}" data-alert-id="${esc(p.id || '')}">
+      <div class="ev ${tone}">${esc(p.event || 'Alert')}</div>
+      <div class="s">${esc(p.headline || p.areaDesc || '')}</div>
+      <div class="meta">${esc((p.severity || '') + ' · ' + (p.urgency || ''))}</div>
+    </div>`;
   }).join('');
-
   $('alerts-list').querySelectorAll('[data-alert-id]').forEach(el=>{
     el.addEventListener('click', ()=> openAlertModal(el.dataset.alertId));
   });
 }
 
 function openAlertModal(id){
-  const p = state.alertCache[id];
+  const f = state.alertCache[id];
+  const p = f?.properties;
   if(!p) return;
   const tone = classifyAlertTone(p);
-  const color = tone === 'extreme' || tone === 'warning' ? 'var(--red)' :
+  const color = (tone === 'extreme' || tone === 'warning') ? 'var(--red)' :
     tone === 'watch' ? 'var(--amber)' : 'var(--cyan)';
-  openModal(p.event || 'NWS Alert', p.severity + ' · ' + (p.urgency || ''), `
+  openModal(p.event || 'NWS Alert', `${p.severity || ''} · ${p.urgency || ''}`, `
     <span class="tag" style="background:${color}33;color:${color}">${esc(p.severity || '—')}</span>
     <span class="tag" style="background:var(--cyan-dim);color:var(--cyan)">${esc(p.msgType || p.status || '')}</span>
-    <div class="block" style="font-weight:600;color:var(--text-hi)">${esc(p.headline || '')}</div>
+    <div class="block" style="font-weight:600">${esc(p.headline || '')}</div>
     <div class="meta-kv"><span class="k">Area</span><span class="v">${esc(p.areaDesc || '—')}</span></div>
     <div class="meta-kv"><span class="k">Onset</span><span class="v">${fmtTime(p.onset)}</span></div>
     <div class="meta-kv"><span class="k">Expires</span><span class="v">${fmtTime(p.expires)}</span></div>
@@ -234,19 +331,90 @@ function openAlertModal(id){
     ${p.description ? `<div class="block">${esc(p.description)}</div>` : ''}
     ${p.instruction ? `<div class="block warn"><b>Actions</b>\n${esc(p.instruction)}</div>` : ''}
   `);
+  // Zoom to alert geometry if present
+  if(f.geometry && map){
+    try{
+      const layer = L.geoJSON(f);
+      map.fitBounds(layer.getBounds().pad(0.2));
+    }catch{}
+  }
 }
 
-/* ---------- NWS Forecast ---------- */
+function renderAlertPolygons(){
+  alertLayer.clearLayers();
+  if(!state.showAlertPoly) return;
+  state.alerts.forEach(f=>{
+    if(!f.geometry) return;
+    const p = f.properties || {};
+    const tone = classifyAlertTone(p);
+    const color = (tone === 'extreme' || tone === 'warning') ? '#ff4d5e' :
+      tone === 'watch' ? '#ff8a3d' : '#4fd1c5';
+    try{
+      const layer = L.geoJSON(f, {
+        style: { color, weight: 1.5, fillColor: color, fillOpacity: 0.12, opacity: 0.85 },
+      });
+      layer.bindTooltip(p.event || 'Alert', { sticky: true });
+      layer.on('click', ()=> openAlertModal(p.id));
+      layer.addTo(alertLayer);
+    }catch{}
+  });
+}
+
+/* SPC Day-1 categorical outlook */
+async function fetchSpc(){
+  try{
+    const res = await fetch('https://www.spc.noaa.gov/products/outlook/day1otlk_cat.lyr.geojson', {
+      headers: { Accept: 'application/geo+json' },
+      cache: 'no-cache',
+    });
+    if(!res.ok) throw new Error('SPC HTTP ' + res.status);
+    const data = await res.json();
+    state.spcFeatures = data.features || [];
+    renderSpc();
+  }catch(err){
+    console.error('SPC', err);
+  }
+}
+function renderSpc(){
+  spcLayer.clearLayers();
+  if(!state.showSpc){
+    if(map.hasLayer(spcLayer)) map.removeLayer(spcLayer);
+    return;
+  }
+  if(!map.hasLayer(spcLayer)) spcLayer.addTo(map);
+  state.spcFeatures.forEach(f=>{
+    const p = f.properties || {};
+    const fill = p.fill || '#55BB55';
+    const stroke = p.stroke || fill;
+    try{
+      const layer = L.geoJSON(f, {
+        style: { color: stroke, weight: 1.5, fillColor: fill, fillOpacity: 0.22, opacity: 0.85 },
+      });
+      layer.bindTooltip(p.LABEL2 || p.LABEL || 'SPC', { sticky: true });
+      layer.on('click', ()=>{
+        openModal(p.LABEL2 || p.LABEL || 'SPC Day-1', p.FORECASTER || '', `
+          <div class="meta-kv"><span class="k">Risk</span><span class="v">${esc(p.LABEL2 || p.LABEL || '')}</span></div>
+          <div class="meta-kv"><span class="k">Issue</span><span class="v">${esc(p.ISSUE_ISO || p.ISSUE || '')}</span></div>
+          <div class="meta-kv"><span class="k">Valid</span><span class="v">${esc(p.VALID_ISO || p.VALID || '')}</span></div>
+          <div class="meta-kv"><span class="k">Expire</span><span class="v">${esc(p.EXPIRE_ISO || p.EXPIRE || '')}</span></div>
+        `);
+      });
+      layer.addTo(spcLayer);
+    }catch{}
+  });
+  restack();
+}
+
+/* Forecast */
 async function fetchForecast(){
   try{
-    const pts = await fetch(
-      `https://api.weather.gov/points/${CONFIG.lat},${CONFIG.lon}`,
-      { headers: { Accept: 'application/geo+json', 'User-Agent': CONFIG.nwsUserAgent } }
-    ).then(r => r.json());
-    const forecastUrl = pts.properties?.forecast;
-    if(!forecastUrl) throw new Error('No forecast URL');
-    const data = await fetch(forecastUrl, {
-      headers: { Accept: 'application/geo+json', 'User-Agent': CONFIG.nwsUserAgent },
+    const pts = await fetch(`https://api.weather.gov/points/${CONFIG.lat},${CONFIG.lon}`, {
+      headers: { Accept: 'application/geo+json', 'User-Agent': CONFIG.nwsUA },
+    }).then(r => r.json());
+    const url = pts.properties?.forecast;
+    if(!url) throw new Error('No forecast URL');
+    const data = await fetch(url, {
+      headers: { Accept: 'application/geo+json', 'User-Agent': CONFIG.nwsUA },
     }).then(r => r.json());
     state.forecast = data.properties?.periods || [];
     renderForecast();
@@ -255,57 +423,45 @@ async function fetchForecast(){
     $('forecast-grid').innerHTML = `<div class="empty err">Forecast unavailable</div>`;
   }
 }
-
 function renderForecast(){
   const periods = state.forecast;
-  if(!periods.length){
-    $('current-obs').innerHTML = `<div class="empty">No forecast data</div>`;
-    return;
-  }
+  if(!periods.length) return;
   const cur = periods[0];
   $('stat-temp').textContent = `${cur.temperature}°${cur.temperatureUnit || 'F'}`;
   $('current-obs').innerHTML = `
     <img src="${cur.icon}" alt="" />
     <div>
-      <div class="t" style="cursor:pointer;">${esc(cur.name)} · ${cur.temperature}°${cur.temperatureUnit || 'F'}</div>
+      <div class="t">${esc(cur.name)} · ${cur.temperature}°${cur.temperatureUnit || 'F'}</div>
       <div class="s">${esc(cur.shortForecast || '')} · Wind ${esc(cur.windSpeed || '—')} ${esc(cur.windDirection || '')}</div>
     </div>`;
-  $('current-obs').style.cursor = 'pointer';
   $('current-obs').onclick = ()=> openForecastModal(0);
-
   $('forecast-grid').innerHTML = periods.slice(0, 14).map((p, i)=>`
     <div class="fc-card" data-fc="${i}">
       <div class="name">${esc(p.name)}</div>
       <img src="${p.icon}" alt="" />
       <div class="temp ${p.isDaytime ? 'day' : 'night'}">${p.temperature}°</div>
       <div class="short">${esc(p.shortForecast || '')}</div>
-    </div>
-  `).join('');
-
+    </div>`).join('');
   $('forecast-grid').querySelectorAll('[data-fc]').forEach(el=>{
     el.addEventListener('click', ()=> openForecastModal(Number(el.dataset.fc)));
   });
 }
-
-function openForecastModal(index){
-  const p = state.forecast[index];
+function openForecastModal(i){
+  const p = state.forecast[i];
   if(!p) return;
   openModal(p.name, p.shortForecast || '', `
     <div style="text-align:center;margin-bottom:12px;">
       <img src="${p.icon}" width="72" height="72" style="border-radius:8px;" alt="" />
-      <div style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-top:6px;">
-        ${p.temperature}°${p.temperatureUnit || 'F'}
-      </div>
+      <div style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-top:6px;">${p.temperature}°${p.temperatureUnit || 'F'}</div>
       <div style="color:var(--amber);font-weight:600;margin-top:4px;">${esc(p.shortForecast || '')}</div>
     </div>
     <div class="meta-kv"><span class="k">Wind</span><span class="v">${esc(p.windSpeed || '—')} ${esc(p.windDirection || '')}</span></div>
     <div class="meta-kv"><span class="k">Precip</span><span class="v">${p.probabilityOfPrecipitation?.value != null ? p.probabilityOfPrecipitation.value + '%' : '—'}</span></div>
-    <div class="meta-kv"><span class="k">Humidity</span><span class="v">${p.relativeHumidity?.value != null ? p.relativeHumidity.value + '%' : '—'}</span></div>
     <div class="block">${esc(p.detailedForecast || '')}</div>
   `);
 }
 
-/* ---------- AirNow AQI ---------- */
+/* AirNow */
 function aqiProfile(aqi, catNum){
   if(catNum && AQI_CATEGORY[catNum]) return AQI_CATEGORY[catNum];
   if(aqi == null || aqi < 0) return AQI_CATEGORY[1];
@@ -316,16 +472,13 @@ function aqiProfile(aqi, catNum){
   if(aqi <= 300) return AQI_CATEGORY[5];
   return AQI_CATEGORY[6];
 }
-
 async function fetchAQI(){
-  const zip = CONFIG.zip;
   const key = CONFIG.airNowKey;
-  const currentUrl = `https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode=${zip}&distance=25&API_KEY=${key}`;
-  const forecastUrl = `https://www.airnowapi.org/aq/forecast/zipCode/?format=application/json&zipCode=${zip}&distance=25&API_KEY=${key}`;
+  const zip = CONFIG.zip;
   try{
     const [cur, fc] = await Promise.all([
-      fetch(currentUrl).then(r => r.json()),
-      fetch(forecastUrl).then(r => r.json()).catch(() => []),
+      fetch(`https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode=${zip}&distance=25&API_KEY=${key}`).then(r => r.json()),
+      fetch(`https://www.airnowapi.org/aq/forecast/zipCode/?format=application/json&zipCode=${zip}&distance=25&API_KEY=${key}`).then(r => r.json()).catch(() => []),
     ]);
     state.aqiCurrent = Array.isArray(cur) ? cur : [];
     state.aqiForecast = Array.isArray(fc) ? fc : [];
@@ -335,7 +488,6 @@ async function fetchAQI(){
     $('aqi-panel').innerHTML = `<div class="empty err">AirNow timeout</div>`;
   }
 }
-
 function renderAQI(){
   const data = state.aqiCurrent;
   state.aqiCache = {};
@@ -344,7 +496,6 @@ function renderAQI(){
     $('stat-aqi').textContent = '—';
     return;
   }
-
   let worstCat = 0, worst = null;
   data.forEach(p=>{
     const n = p.Category?.Number || 0;
@@ -355,39 +506,18 @@ function renderAQI(){
   let html = '';
   if(worst && worstCat >= 3){
     const prof = aqiProfile(worst.AQI, worstCat);
-    state.aqiCache.health = { title: `${prof.label} — ${worst.ParameterName}`, body: aqiDetailHtml(worst, prof) };
-    html += `<div class="banner bad" data-aqi="health">
-      <b style="color:${prof.color}">${prof.label.toUpperCase()} · ${esc(worst.ParameterName)}</b>
-      <div style="margin-top:3px;color:var(--text-mid)">${esc(prof.message)}</div>
-    </div>`;
+    state.aqiCache.health = { title: `${prof.label} — ${worst.ParameterName}`, body: aqiDetail(worst, prof) };
+    html += `<div class="banner bad" data-aqi="health"><b style="color:${prof.color}">${prof.label.toUpperCase()} · ${esc(worst.ParameterName)}</b>
+      <div style="margin-top:3px;color:var(--text-mid)">${esc(prof.message)}</div></div>`;
   }
-
-  const actionDay = state.aqiForecast.find(f => f.ActionDay);
-  if(actionDay){
-    const disc = actionDay.Discussion || 'Air Quality Action Day declared.';
-    state.aqiCache.actionday = {
-      title: 'Air Quality Action Day',
-      body: `<div class="block">${esc(disc)}</div>
-        <div class="meta-kv"><span class="k">Date</span><span class="v">${esc(actionDay.DateForecast || '')}</span></div>
-        <div class="meta-kv"><span class="k">Area</span><span class="v">${esc((actionDay.ReportingArea || '') + ' ' + (actionDay.StateCode || ''))}</span></div>`,
-    };
-    html += `<div class="banner" data-aqi="actionday">
-      <b style="color:var(--amber)">AIR QUALITY ACTION DAY</b>
-      <div style="margin-top:3px;color:var(--text-mid)">${esc(disc.slice(0, 140))}${disc.length > 140 ? '…' : ''}</div>
-    </div>`;
-  }
-
   const meta = data[0];
-  html += `<div class="meta" style="font-family:var(--font-display);font-size:10px;color:var(--text-dim);margin-bottom:8px;">
-    ${esc(meta.ReportingArea || '')}, ${esc(meta.StateCode || '')} · ${esc(meta.DateObserved || '')} ${meta.HourObserved != null ? meta.HourObserved + ':00' : ''}
-  </div>`;
-
-  html += `<div class="aqi-grid">`;
+  html += `<div style="font-family:var(--font-display);font-size:10px;color:var(--text-dim);margin-bottom:8px;">
+    ${esc(meta.ReportingArea || '')}, ${esc(meta.StateCode || '')} · ${esc(meta.DateObserved || '')}
+  </div><div class="aqi-grid">`;
   data.forEach((p, idx)=>{
-    const cat = p.Category?.Number;
-    const prof = aqiProfile(p.AQI, cat);
+    const prof = aqiProfile(p.AQI, p.Category?.Number);
     const key = 'p' + idx;
-    state.aqiCache[key] = { title: `${p.ParameterName} · ${prof.label}`, body: aqiDetailHtml(p, prof) };
+    state.aqiCache[key] = { title: `${p.ParameterName} · ${prof.label}`, body: aqiDetail(p, prof) };
     html += `<div class="aqi-cell" data-aqi="${key}">
       <div class="p">${esc(p.ParameterName)}</div>
       <div class="v" style="color:${prof.color}">${p.AQI}</div>
@@ -395,31 +525,6 @@ function renderAQI(){
     </div>`;
   });
   html += `</div>`;
-
-  if(state.aqiForecast.length){
-    html += `<div style="margin-top:10px;font-family:var(--font-display);font-size:9.5px;color:var(--text-dim);letter-spacing:.5px;text-transform:uppercase;">Forecast</div>
-      <div class="aqi-grid" style="margin-top:6px;">`;
-    state.aqiForecast.slice(0, 6).forEach((f, i)=>{
-      if(!f.ParameterName) return;
-      const prof = aqiProfile(f.AQI, f.Category?.Number);
-      const key = 'f' + i;
-      state.aqiCache[key] = {
-        title: `${f.ParameterName} forecast`,
-        body: `<div class="meta-kv"><span class="k">Date</span><span class="v">${esc(f.DateForecast || '')}</span></div>
-          <div class="meta-kv"><span class="k">AQI</span><span class="v" style="color:${prof.color}">${f.AQI !== -1 ? f.AQI : '—'}</span></div>
-          <div class="meta-kv"><span class="k">Category</span><span class="v">${prof.label}</span></div>
-          <div class="meta-kv"><span class="k">Action day</span><span class="v">${f.ActionDay ? 'Yes' : 'No'}</span></div>
-          ${f.Discussion ? `<div class="block">${esc(f.Discussion)}</div>` : `<div class="block">${esc(prof.message)}</div>`}`,
-      };
-      html += `<div class="aqi-cell" data-aqi="${key}">
-        <div class="p">${esc((f.DateForecast || '').slice(5))} · ${esc(f.ParameterName)}</div>
-        <div class="v" style="color:${prof.color};font-size:18px;">${f.AQI !== -1 ? f.AQI : '—'}</div>
-        <div class="c" style="color:${prof.color}">${prof.label}</div>
-      </div>`;
-    });
-    html += `</div>`;
-  }
-
   $('aqi-panel').innerHTML = html;
   $('aqi-panel').querySelectorAll('[data-aqi]').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -428,43 +533,30 @@ function renderAQI(){
     });
   });
 }
-
-function aqiDetailHtml(p, prof){
-  return `
-    <span class="tag" style="background:${prof.color}33;color:${prof.color}">${prof.label}</span>
+function aqiDetail(p, prof){
+  return `<span class="tag" style="background:${prof.color}33;color:${prof.color}">${prof.label}</span>
     <div class="meta-kv"><span class="k">Parameter</span><span class="v">${esc(p.ParameterName)}</span></div>
     <div class="meta-kv"><span class="k">AQI</span><span class="v" style="color:${prof.color}">${p.AQI}</span></div>
-    <div class="meta-kv"><span class="k">Area</span><span class="v">${esc((p.ReportingArea || '') + ', ' + (p.StateCode || ''))}</span></div>
-    <div class="meta-kv"><span class="k">Observed</span><span class="v">${esc(p.DateObserved || '')} ${p.HourObserved != null ? p.HourObserved + ':00' : ''} ${esc(p.LocalTimeZone || '')}</span></div>
+    <div class="meta-kv"><span class="k">Area</span><span class="v">${esc((p.ReportingArea||'')+', '+(p.StateCode||''))}</span></div>
     <div class="block">${esc(prof.message)}</div>`;
 }
 
-/* ---------- USGS hydrology ---------- */
+/* USGS + NOAA */
 function renderHydro(){
   $('hydro-list').innerHTML = SCHUYLKILL_GAUGES.map(g=>`
     <div class="gauge-row" data-gauge="${g.id}" data-name="${esc(g.name)}">
-      <div>
-        <div class="name">${esc(g.name)}</div>
-        <div class="id">USGS ${g.id}</div>
-      </div>
-      <span style="color:var(--cyan);font-size:12px;">↗</span>
-    </div>
-  `).join('');
-
+      <div><div class="name">${esc(g.name)}</div><div class="id">USGS ${g.id}</div></div>
+      <span style="color:var(--cyan)">↗</span>
+    </div>`).join('');
   $('hydro-list').querySelectorAll('[data-gauge]').forEach(el=>{
     el.addEventListener('click', ()=>{
       const id = el.dataset.gauge;
-      const name = el.dataset.name;
       const embed = `https://dashboard.waterdata.usgs.gov/api/gwis/2.1/service/site?agencyCode=USGS&siteNumber=${id}&open=plots&banner=false&pad=false`;
-      openModal(name, 'USGS ' + id, `
-        <div class="iframe-wrap"><iframe src="${embed}" title="USGS gauge ${id}"></iframe></div>
-        <p class="hint" style="margin-top:8px;">Live USGS National Water Dashboard embed for site ${id}.</p>
-      `);
+      openModal(el.dataset.name, 'USGS ' + id, `<div class="iframe-wrap"><iframe src="${embed}" title="USGS ${id}"></iframe></div>`);
     });
   });
 }
 
-/* ---------- NOAA Tides ---------- */
 async function fetchTides(){
   const station = CONFIG.noaaStation;
   const base = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station}&time_zone=lst_ldt&units=english&format=json&date=today`;
@@ -475,22 +567,14 @@ async function fetchTides(){
       fetch(`${base}&product=predictions&datum=MLLW`).then(r => r.json()),
       fetch(`${base}&product=air_temperature`).then(r => r.json()),
     ]);
-
-    const last = arr => (arr && arr.length ? arr[arr.length - 1] : null);
-    const m = last(wlMllw.data);
-    const n = last(wlNavd.data);
-    const a = last(air.data);
+    const last = a => (a && a.length ? a[a.length - 1] : null);
+    const m = last(wlMllw.data), n = last(wlNavd.data), a = last(air.data);
     $('tide-mllw').textContent = m ? m.v + ' ft' : '—';
     $('tide-navd').textContent = n ? n.v + ' ft' : '—';
     $('tide-air').textContent = a ? a.v + '°F' : '—';
-
-    const labels = (wlMllw.data || []).map(d => {
-      const t = (d.t || '').split(' ')[1] || '';
-      return t.slice(0, 5);
-    });
+    const labels = (wlMllw.data || []).map(d => ((d.t || '').split(' ')[1] || '').slice(0, 5));
     const obs = (wlMllw.data || []).map(d => parseFloat(d.v));
     const pred = (preds.predictions || []).map(d => parseFloat(d.v)).slice(0, labels.length);
-
     const ctx = $('tide-chart')?.getContext('2d');
     if(!ctx) return;
     if(state.tideChart) state.tideChart.destroy();
@@ -501,25 +585,12 @@ async function fetchTides(){
       data: {
         labels,
         datasets: [
-          {
-            label: 'Observed MLLW (ft)',
-            data: obs,
-            borderColor: '#4fd1c5',
-            backgroundColor: 'rgba(79,209,197,0.12)',
-            borderWidth: 2, pointRadius: 0, fill: true, tension: 0.35,
-          },
-          {
-            label: 'Predicted MLLW (ft)',
-            data: pred,
-            borderColor: '#ff4d5e',
-            borderDash: [4, 4],
-            borderWidth: 2, pointRadius: 0, fill: false, tension: 0.35,
-          },
+          { label: 'Observed MLLW', data: obs, borderColor: '#4fd1c5', backgroundColor: 'rgba(79,209,197,0.12)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.35 },
+          { label: 'Predicted MLLW', data: pred, borderColor: '#ff4d5e', borderDash: [4,4], borderWidth: 2, pointRadius: 0, fill: false, tension: 0.35 },
         ],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 10, font: { size: 10 } } } },
         scales: {
@@ -530,40 +601,25 @@ async function fetchTides(){
     });
   }catch(err){
     console.error('Tides', err);
-    $('tide-mllw').textContent = '—';
   }
 }
 
-/* ---------- Windy ---------- */
-function windyUrl(overlay){
-  const product = (overlay === 'radar' || overlay === 'satellite') ? overlay : 'gfs';
-  return `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=f&metricWind=mph&zoom=9&overlay=${overlay}&product=${product}&level=surface&lat=${CONFIG.lat}&lon=${CONFIG.lon}`;
-}
-
-function setWindyLayer(layer){
-  $('windy-frame').src = windyUrl(layer);
-}
-
-/* ---------- Refresh cycle ---------- */
+/* Refresh */
 async function softRefresh(){
   $('refresh-btn')?.classList.add('spinning');
   setStatus('warn', 'Syncing');
   try{
-    await Promise.all([
-      fetchAlerts(),
-      fetchForecast(),
-      fetchAQI(),
-      fetchTides(),
-    ]);
+    await Promise.all([fetchAlerts(), fetchForecast(), fetchAQI(), fetchTides()]);
+    if(state.showSpc) await fetchSpc();
+    if(nexradTileLayer) showNexradFrame(state.nexrad.frameIndex);
     setStatus('ok', 'Live');
-  }catch(e){
+  }catch{
     setStatus('err', 'Partial');
   }finally{
     $('refresh-btn')?.classList.remove('spinning');
     state.countdown = CONFIG.refreshSec;
   }
 }
-
 function tickCountdown(){
   state.countdown -= 1;
   if(state.countdown <= 0){
@@ -574,29 +630,11 @@ function tickCountdown(){
   if(el) el.textContent = String(state.countdown);
 }
 
-/* ---------- Utils ---------- */
-function esc(s){
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-function fmtTime(iso){
-  if(!iso) return '—';
-  try{ return new Date(iso).toLocaleString(); }catch(_){ return String(iso); }
-}
-
-/* ---------- Wire UI ---------- */
 function wire(){
   $('modal-close')?.addEventListener('click', closeModal);
-  $('modal-backdrop')?.addEventListener('click', e=>{
-    if(e.target === $('modal-backdrop')) closeModal();
-  });
+  $('modal-backdrop')?.addEventListener('click', e=>{ if(e.target === $('modal-backdrop')) closeModal(); });
   document.addEventListener('keydown', e=>{ if(e.key === 'Escape') closeModal(); });
-
   $('refresh-btn')?.addEventListener('click', softRefresh);
-
   $('sound-btn')?.addEventListener('click', ()=>{
     ensureAudio();
     state.soundEnabled = !state.soundEnabled;
@@ -605,7 +643,6 @@ function wire(){
     btn.classList.toggle('active', state.soundEnabled);
     if(state.soundEnabled) playTone('watch');
   });
-
   $('alert-filter-seg')?.addEventListener('click', e=>{
     const btn = e.target.closest('button[data-af]');
     if(!btn) return;
@@ -614,23 +651,33 @@ function wire(){
     state.alertFilter = btn.dataset.af;
     renderAlerts();
   });
-
-  $('windy-layer')?.addEventListener('change', e=> setWindyLayer(e.target.value));
-  $('windy-reset')?.addEventListener('click', ()=>{
-    setWindyLayer($('windy-layer').value || 'clouds');
+  $('basemap-select')?.addEventListener('change', e=> setBasemap(e.target.value));
+  $('nexrad-product')?.addEventListener('change', ()=> showNexradFrame(state.nexrad.frameIndex));
+  $('nexrad-play')?.addEventListener('click', startNexradAnim);
+  $('nexrad-pause')?.addEventListener('click', ()=>{
+    stopNexradAnim();
+    state.nexrad.frameIndex = state.nexrad.offsets.length - 1;
+    showNexradFrame(state.nexrad.frameIndex);
   });
-
-  // Unlock audio context on first gesture
+  $('layer-spc')?.addEventListener('change', e=>{
+    state.showSpc = e.target.checked;
+    if(state.showSpc && !state.spcFeatures.length) fetchSpc();
+    else renderSpc();
+  });
+  $('layer-alert-poly')?.addEventListener('change', e=>{
+    state.showAlertPoly = e.target.checked;
+    renderAlertPolygons();
+  });
+  $('map-recenter')?.addEventListener('click', ()=> map.flyTo([CONFIG.lat, CONFIG.lon], 9, { duration: 0.6 }));
   document.addEventListener('click', ()=> ensureAudio(), { once: true });
 }
 
-/* ---------- Boot ---------- */
 async function init(){
   wire();
+  initMap();
   renderHydro();
   setStatus('warn', 'Connecting');
   await softRefresh();
   setInterval(tickCountdown, 1000);
 }
-
 init();
