@@ -57,8 +57,17 @@ header{
 .icon-btn.active{background:var(--cyan-dim);}
 .icon-btn.spinning{animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-main{display:grid;grid-template-columns:270px 1fr 250px 280px;min-height:0;overflow:hidden;}
-@media (max-width:1100px){main{grid-template-columns:1fr;overflow:auto;}.map-wrap{min-height:280px;}.outlook-strip{max-height:none;}}
+main{display:grid;grid-template-columns:minmax(240px,1.05fr) minmax(320px,2.4fr) minmax(220px,1fr) minmax(240px,1.05fr);min-height:0;overflow:hidden;}
+@media (max-width:1400px){
+  main{grid-template-columns:minmax(220px,1fr) minmax(280px,2fr) minmax(200px,0.95fr) minmax(220px,1fr);}
+}
+@media (max-width:1100px){
+  main{grid-template-columns:1fr;overflow:auto;}
+  .map-wrap{min-height:300px;}
+  .outlook-strip{max-height:none;}
+  .panel{max-height:50vh;}
+}
+
 .panel{background:var(--bg-panel);border-right:1px solid var(--line);overflow:hidden;min-height:0;display:flex;flex-direction:column;}
 .panel-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;}
 .panel-pinned{flex:0 0 auto;border-top:1px solid var(--line);background:var(--bg-panel);}
@@ -91,7 +100,21 @@ main{display:grid;grid-template-columns:270px 1fr 250px 280px;min-height:0;overf
 .map-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line);background:rgba(11,15,22,.95);z-index:5;}
 .map-toolbar label{font-family:var(--font-display);font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text-dim);}
 .map-toolbar select{background:var(--bg-panel);color:var(--text-hi);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;}
-#leaflet-map{flex:1;width:100%;min-height:240px;background:#0a0e14;}
+#leaflet-map{flex:1;width:100%;height:100%;min-height:240px;background:#0a0e14;}
+.map-stage{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;}
+.map-zoom-controls{
+  position:absolute;right:12px;bottom:12px;z-index:500;
+  display:flex;flex-direction:column;gap:4px;
+}
+.map-zoom-controls button{
+  width:34px;height:34px;border-radius:8px;
+  border:1px solid var(--line);background:rgba(11,15,22,.92);
+  color:var(--text-mid);cursor:pointer;
+  font-family:var(--font-display);font-size:16px;font-weight:700;
+  backdrop-filter:blur(4px);
+}
+.map-zoom-controls button:hover{border-color:var(--cyan);color:var(--cyan);}
+.leaflet-control-zoom{display:none !important;}
 .leaflet-container{background:#0a0e14;font-family:var(--font-body);}
 .outlook-strip{flex:0 0 auto;max-height:200px;overflow-y:auto;border-top:1px solid var(--line);background:var(--bg-panel);padding:10px 12px;}
 .outlook-strip h3{font-family:var(--font-display);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;display:flex;justify-content:space-between;}
@@ -201,9 +224,6 @@ footer b{color:var(--text-mid);font-weight:500;}
             <button type="button" id="nexrad-pause" class="active">Pause</button>
           </div>
           <label style="display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-mid);">
-            <input type="checkbox" id="layer-spc" /> SPC Day-1
-          </label>
-          <label style="display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-mid);">
             <input type="checkbox" id="layer-hrrr" /> HRRR
           </label>
           <select id="hrrr-product" title="HRRR field" style="display:none;">
@@ -215,10 +235,22 @@ footer b{color:var(--text-mid);font-weight:500;}
           <label style="display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-mid);">
             <input type="checkbox" id="layer-alert-poly" checked /> Alert areas
           </label>
-          <button class="btn" id="map-recenter">19428</button>
+          <button class="btn" id="map-recenter" title="Southeastern PA / Mount Holly">19428</button>
+          <button class="btn" id="map-reset" title="Reset to SE PA / Mount Holly view">Reset</button>
+          <button class="btn" id="map-usa" title="Zoom to continental USA">USA</button>
+          <div class="seg" id="spc-toggle-seg">
+            <button type="button" id="spc-on">SPC On</button>
+            <button type="button" id="spc-off" class="active">SPC Off</button>
+          </div>
           <span class="wx-mini" id="nexrad-frame-label">Radar: live</span>
         </div>
-        <div id="leaflet-map"></div>
+        <div class="map-stage">
+          <div id="leaflet-map"></div>
+          <div class="map-zoom-controls">
+            <button type="button" id="map-zoom-in" title="Zoom in">+</button>
+            <button type="button" id="map-zoom-out" title="Zoom out">−</button>
+          </div>
+        </div>
       </div>
       <div class="outlook-strip">
         <h3>7-Day Outlook <span class="badge">NWS</span></h3>
