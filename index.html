@@ -59,7 +59,9 @@ header{
 @keyframes spin{to{transform:rotate(360deg)}}
 main{display:grid;grid-template-columns:300px 1fr 320px;min-height:0;overflow:hidden;}
 @media (max-width:1100px){main{grid-template-columns:1fr;overflow:auto;}.map-wrap{min-height:280px;}.outlook-strip{max-height:none;}}
-.panel{background:var(--bg-panel);border-right:1px solid var(--line);overflow-y:auto;min-height:0;}
+.panel{background:var(--bg-panel);border-right:1px solid var(--line);overflow:hidden;min-height:0;display:flex;flex-direction:column;}
+.panel-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;}
+.panel-pinned{flex:0 0 auto;border-top:1px solid var(--line);background:var(--bg-panel);}
 .panel.right{border-right:none;border-left:1px solid var(--line);}
 .section{border-bottom:1px solid var(--line);padding:12px 14px;}
 .section h3{font-family:var(--font-display);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
@@ -116,7 +118,7 @@ main{display:grid;grid-template-columns:300px 1fr 320px;min-height:0;overflow:hi
 .empty.err{color:var(--red);}
 footer{height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-top:1px solid var(--line);font-family:var(--font-display);font-size:10px;color:var(--text-dim);background:#080b10;}
 footer b{color:var(--text-mid);font-weight:500;}
-.modal-backdrop{position:fixed;inset:0;z-index:200;background:rgba(3,5,10,.72);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:20px;}
+.modal-backdrop{position:fixed;inset:0;z-index:10000;background:rgba(3,5,10,.72);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:20px;}
 .modal-backdrop.open{display:flex;}
 .modal{width:min(640px,100%);max-height:min(86vh,900px);background:var(--bg-panel);border:1px solid var(--line-bright);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.55);}
 .modal-head{display:flex;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--bg-panel-raised);}
@@ -160,18 +162,22 @@ footer b{color:var(--text-mid);font-weight:500;}
   </header>
   <main>
     <aside class="panel">
-      <div class="section">
-        <h3>NWS Alerts · PA <span class="badge" id="alerts-badge">—</span></h3>
-        <div class="seg" id="alert-filter-seg" style="margin-bottom:10px;">
-          <button type="button" data-af="all" class="active">All PA</button>
-          <button type="button" data-af="local">Local</button>
-          <button type="button" data-af="severe">Severe</button>
+      <div class="panel-scroll">
+        <div class="section">
+          <h3>NWS Alerts · PA <span class="badge" id="alerts-badge">—</span></h3>
+          <div class="seg" id="alert-filter-seg" style="margin-bottom:10px;">
+            <button type="button" data-af="all" class="active">All PA</button>
+            <button type="button" data-af="local">Local</button>
+            <button type="button" data-af="severe">Severe</button>
+          </div>
+          <div id="alerts-list"><div class="empty">Loading alerts…</div></div>
         </div>
-        <div id="alerts-list"><div class="empty">Loading alerts…</div></div>
       </div>
-      <div class="section">
-        <h3>AirNow AQI <span class="badge">19428</span></h3>
-        <div id="aqi-panel"><div class="empty">Loading AQI…</div></div>
+      <div class="panel-pinned">
+        <div class="section" style="border-bottom:none;">
+          <h3>AirNow AQI <span class="badge">19428</span></h3>
+          <div id="aqi-panel"><div class="empty">Loading AQI…</div></div>
+        </div>
       </div>
     </aside>
     <section class="center-col">
@@ -197,6 +203,15 @@ footer b{color:var(--text-mid);font-weight:500;}
           <label style="display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-mid);">
             <input type="checkbox" id="layer-spc" /> SPC Day-1
           </label>
+          <label style="display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-mid);">
+            <input type="checkbox" id="layer-hrrr" /> HRRR
+          </label>
+          <select id="hrrr-product" title="HRRR field" style="display:none;">
+            <option value="hrrr::REFC-F0000-0" selected>HRRR Reflectivity F00</option>
+            <option value="hrrr::TMP-F0000-2">HRRR Temp 2m F00</option>
+            <option value="hrrr::REFC-F0001-0">HRRR Reflectivity F01</option>
+            <option value="hrrr::REFC-F0003-0">HRRR Reflectivity F03</option>
+          </select>
           <label style="display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-mid);">
             <input type="checkbox" id="layer-alert-poly" checked /> Alert areas
           </label>
