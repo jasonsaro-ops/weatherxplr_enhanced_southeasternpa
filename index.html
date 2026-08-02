@@ -197,11 +197,25 @@ main{
 /* Compact 7-day strip under map */
 .outlook-strip{
   flex:0 0 auto;
-  max-height:210px;
+  max-height:42vh;
   overflow-y:auto;
   border-top:1px solid var(--line);
   background:var(--bg-panel);
   padding:10px 12px 12px;
+}
+.aqi-under-outlook{
+  margin-top:12px;
+  padding-top:10px;
+  border-top:1px solid var(--line);
+}
+.aqi-under-outlook h3{
+  font-family:var(--font-display);font-size:10px;
+  letter-spacing:1px;text-transform:uppercase;
+  color:var(--text-dim);margin-bottom:8px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.aqi-under-outlook .aqi-grid{
+  grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));
 }
 .outlook-strip h3{
   font-family:var(--font-display);font-size:10px;
@@ -366,10 +380,6 @@ footer b{color:var(--text-mid);font-weight:500;}
         <div id="alerts-list"><div class="empty">Loading alerts…</div></div>
       </div>
 
-      <div class="section">
-        <h3>AirNow AQI <span class="badge">19428</span></h3>
-        <div id="aqi-panel"><div class="empty">Loading AQI…</div></div>
-      </div>
     </aside>
 
     <!-- CENTER: map + compact 7-day outlook -->
@@ -399,6 +409,10 @@ footer b{color:var(--text-mid);font-weight:500;}
           <div class="empty">Loading conditions…</div>
         </div>
         <div class="forecast-grid" id="forecast-grid"></div>
+        <div class="aqi-under-outlook">
+          <h3>AirNow AQI <span class="badge">19428</span></h3>
+          <div id="aqi-panel"><div class="empty">Loading AQI…</div></div>
+        </div>
       </div>
     </section>
 
