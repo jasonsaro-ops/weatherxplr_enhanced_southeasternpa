@@ -162,6 +162,33 @@ footer b{color:var(--text-mid);font-weight:500;}
 .seg{display:flex;gap:4px;flex-wrap:wrap;}
 .seg button{flex:1;min-width:0;padding:5px 6px;border-radius:6px;border:1px solid var(--line);background:var(--bg-void);color:var(--text-dim);font-family:var(--font-display);font-size:10px;cursor:pointer;}
 .seg button.active{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);}
+#spc-toggle-seg{gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg-void);}
+#spc-toggle-seg button{
+  flex:0 0 auto;border:none;border-radius:0;padding:6px 12px;
+  background:transparent;color:var(--text-dim);font-size:10px;letter-spacing:.4px;
+}
+#spc-toggle-seg button + button{border-left:1px solid var(--line);}
+#spc-toggle-seg button.active{
+  background:var(--cyan-dim);color:var(--cyan);
+  box-shadow:inset 0 0 0 1px rgba(79,209,197,.35);
+}
+#spc-toggle-seg button#spc-off.active{
+  background:#1a1014;color:var(--text-mid);
+  box-shadow:inset 0 0 0 1px rgba(139,150,171,.25);
+}
+#spc-toggle-seg button:hover:not(.active){color:var(--text-hi);background:rgba(255,255,255,.03);}
+#alert-overlay-seg{gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg-void);}
+#alert-overlay-seg button{flex:0 0 auto;border:none;border-radius:0;padding:6px 10px;background:transparent;color:var(--text-dim);font-size:10px;letter-spacing:.3px;}
+#alert-overlay-seg button + button{border-left:1px solid var(--line);}
+#alert-overlay-seg button.active{background:#ff8a3d33;color:var(--amber);box-shadow:inset 0 0 0 1px rgba(255,138,61,.35);}
+#alert-overlay-seg button#alerts-off.active{background:#1a1014;color:var(--text-mid);box-shadow:inset 0 0 0 1px rgba(139,150,171,.25);}
+#alert-overlay-seg button:hover:not(.active){color:var(--text-hi);background:rgba(255,255,255,.03);}
+.wind-card{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;}
+.wind-metric{background:var(--bg-void);border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center;}
+.wind-metric .v{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--cyan);}
+.wind-metric .k{font-size:9px;color:var(--text-dim);font-family:var(--font-display);letter-spacing:.5px;text-transform:uppercase;margin-top:3px;}
+.wind-dir{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;font-size:12px;color:var(--text-mid);}
+.wind-arrow{display:inline-flex;width:28px;height:28px;border-radius:50%;border:1px solid var(--line);align-items:center;justify-content:center;color:var(--cyan);font-size:14px;transition:transform .3s ease;}
 .banner{padding:8px 10px;border-radius:7px;margin-bottom:8px;cursor:pointer;font-size:11.5px;border-left:3px solid var(--amber);background:#1a1510;}
 .banner.bad{border-left-color:var(--red);background:#1a1014;}
 .hint{font-size:10.5px;color:var(--text-dim);line-height:1.4;margin-top:6px;}
@@ -178,6 +205,7 @@ footer b{color:var(--text-mid);font-weight:500;}
     <div class="hstat"><div class="n" id="stat-alerts">—</div><div class="l">PA Alerts</div></div>
     <div class="hstat"><div class="n" id="stat-aqi">—</div><div class="l">AQI</div></div>
     <div class="hstat"><div class="n" id="stat-temp">—</div><div class="l">Temp</div></div>
+    <div class="hstat"><div class="n" id="stat-wind">—</div><div class="l">Wind</div></div>
     <div class="hstat"><div class="n" id="countdown">120</div><div class="l">Refresh</div></div>
     <div class="status-pill" id="api-status"><span class="led"></span><span id="api-status-text">Boot</span></div>
     <button class="icon-btn" id="sound-btn" title="Alert tones">🔇</button>
@@ -197,6 +225,10 @@ footer b{color:var(--text-mid);font-weight:500;}
         </div>
       </div>
       <div class="panel-pinned">
+        <div class="section">
+          <h3>Wind · Open-Meteo <span class="badge">19428</span></h3>
+          <div id="wind-panel"><div class="empty">Loading wind…</div></div>
+        </div>
         <div class="section" style="border-bottom:none;">
           <h3>AirNow AQI <span class="badge">19428</span></h3>
           <div id="aqi-panel"><div class="empty">Loading AQI…</div></div>
@@ -214,15 +246,20 @@ footer b{color:var(--text-mid);font-weight:500;}
             <option value="imagery">Satellite</option>
           </select>
           <label>Radar</label>
-          <select id="nexrad-product">
+          <div class="seg" id="radar-source-seg">
+            <button type="button" data-radar="rainviewer" class="active">RainViewer</button>
+            <button type="button" data-radar="nexrad">NEXRAD</button>
+          </div>
+          <select id="nexrad-product" style="display:none;">
             <option value="nexrad-n0q-900913" selected>Base Reflectivity</option>
             <option value="nexrad-eet-900913">Echo Tops</option>
             <option value="q2-n1p-900913">MRMS 1h precip</option>
           </select>
           <div class="seg">
-            <button type="button" id="nexrad-play">Play</button>
-            <button type="button" id="nexrad-pause" class="active">Pause</button>
+            <button type="button" id="nexrad-play" class="active">Play</button>
+            <button type="button" id="nexrad-pause">Pause</button>
           </div>
+          <span class="wx-mini" id="nexrad-frame-label">Radar: RainViewer</span>
           <label style="display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-mid);">
             <input type="checkbox" id="layer-hrrr" /> HRRR
           </label>
@@ -232,9 +269,10 @@ footer b{color:var(--text-mid);font-weight:500;}
             <option value="hrrr::REFC-F0001-0">HRRR Reflectivity F01</option>
             <option value="hrrr::REFC-F0003-0">HRRR Reflectivity F03</option>
           </select>
-          <label style="display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-mid);">
-            <input type="checkbox" id="layer-alert-poly" checked /> Alert areas
-          </label>
+          <div class="seg" id="alert-overlay-seg" title="NWS alert polygons">
+            <button type="button" id="alerts-on" class="active">Alerts On</button>
+            <button type="button" id="alerts-off">Alerts Off</button>
+          </div>
           <button class="btn" id="map-recenter" title="Southeastern PA / Mount Holly">19428</button>
           <button class="btn" id="map-reset" title="Reset to SE PA / Mount Holly view">Reset</button>
           <button class="btn" id="map-usa" title="Zoom to continental USA">USA</button>
@@ -242,7 +280,7 @@ footer b{color:var(--text-mid);font-weight:500;}
             <button type="button" id="spc-on">SPC On</button>
             <button type="button" id="spc-off" class="active">SPC Off</button>
           </div>
-          <span class="wx-mini" id="nexrad-frame-label">Radar: live</span>
+          
         </div>
         <div class="map-stage">
           <div id="leaflet-map"></div>
