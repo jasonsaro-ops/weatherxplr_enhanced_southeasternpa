@@ -200,13 +200,13 @@ const config = {
   content: [{
     type: "row",
     content: [
-      /* LEFT column — alerts + obs + discussion */
+      /* LEFT */
       {
-        type: "column", width: 26,
+        type: "column", width: 24,
         content: [
-          { type: "component", componentName: "nwsAlerts", title: "NWS HAZARDS · PA", height: 42 },
+          { type: "component", componentName: "nwsAlerts", title: "NWS HAZARDS", height: 44 },
           {
-            type: "stack", height: 58,
+            type: "stack", height: 56,
             content: [
               { type: "component", componentName: "currentObs", title: "SURFACE OBS" },
               { type: "component", componentName: "nwsDiscussion", title: "PHI AFD" },
@@ -215,31 +215,30 @@ const config = {
           }
         ]
       },
-      /* CENTER — stacked radar displays */
+      /* CENTER — single map */
       {
-        type: "column", width: 48,
+        type: "column", width: 52,
         content: [
-          { type: "component", componentName: "radarMap", title: "RADAR ARRAY", height: 50 },
-          { type: "component", componentName: "cloudMap", title: "SATELLITE / MODEL ARRAY", height: 50 }
+          { type: "component", componentName: "radarMap", title: "RADAR / MODEL ARRAY" }
         ]
       },
-      /* RIGHT — forecast + environmental */
+      /* RIGHT */
       {
-        type: "column", width: 26,
+        type: "column", width: 24,
         content: [
           {
-            type: "stack", height: 40,
+            type: "stack", height: 38,
             content: [
-              { type: "component", componentName: "localForecast", title: "7-DAY OUTLOOK" },
+              { type: "component", componentName: "localForecast", title: "7-DAY" },
               { type: "component", componentName: "hourlyForecast", title: "HOURLY" }
             ]
           },
           {
-            type: "stack", height: 60,
+            type: "stack", height: 62,
             content: [
               { type: "component", componentName: "airQualityPanel", title: "AIR QUALITY" },
               { type: "component", componentName: "hydrologyFeed", title: "HYDROLOGY" },
-              { type: "component", componentName: "noaaTides", title: "TIDES 8545240" }
+              { type: "component", componentName: "noaaTides", title: "TIDES" }
             ]
           }
         ]
@@ -260,19 +259,6 @@ layout.registerComponent("radarMap", function (container) {
   setTimeout(() => {
     container.getElement().find("#radarLayerSelect").on("change", function () {
       container.getElement().find("#radarIframe")[0].src = windyUrl(this.value);
-    });
-  }, 150);
-});
-
-layout.registerComponent("cloudMap", function (container) {
-  container.getElement().html(`
-    <div style="position:relative;width:100%;height:100%;background:#0b0d10;">
-      <div class="layer-bar">${buildLayerSelect("cloudLayerSelect", "clouds")}</div>
-      <iframe id="cloudIframe" src="${windyUrl("clouds")}" style="width:100%;height:100%;border:none;"></iframe>
-    </div>`);
-  setTimeout(() => {
-    container.getElement().find("#cloudLayerSelect").on("change", function () {
-      container.getElement().find("#cloudIframe")[0].src = windyUrl(this.value);
     });
   }, 150);
 });
