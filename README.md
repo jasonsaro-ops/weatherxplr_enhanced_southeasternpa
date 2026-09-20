@@ -1,59 +1,43 @@
-# WEATHERXPLR Enhanced — Southeastern Pennsylvania Command Array
+# WEATHERXPLR Enhanced — SE-PA Mission Array
 
-**Mission-critical weather operations center** styled after NOAA’s **CAVE** (Common AWIPS Visualization Environment).
+Compact **Martian / Territory Studio–inspired** mission-control dashboard for Southeastern Pennsylvania situational awareness.
 
-Live site target:  
-https://jasonsaro-ops.github.io/weatherxplr_enhanced_southeasternpa/
+**Live:** https://jasonsaro-ops.github.io/weatherxplr_enhanced_southeasternpa/
 
-## Features
+## Design language
+- The Martian (Territory Studio) Mission Control aesthetic: dark charcoal, amber/orange NASA accents, clean IBM Plex Mono typography, quiet authority
+- Dense but readable — built to sit on a monitor alongside other apps
+- Stacked radar arrays in the center column for primary visual focus
 
-- **CAVE-style multi-pane docking** (Golden Layout) — dense, technical, dark command-center UI
-- **2-minute real-time refresh cycle** for all primary feeds
-- **Multi-tone alerting system** (ported from montcoxplr Web Audio API)
-  - Extreme / critical → urgent two-tone wail
-  - Severe / moderate → EMS-style rising chime
-  - Advisory / minor → neutral double-beep
-- **NWS API** integration
-  - Active Pennsylvania alerts (severity-sorted)
-  - 7-day forecast + hourly forecast
-  - Nearest surface observation stations
-  - Philadelphia (PHI) Area Forecast Discussion (AFD)
-- **AirNow** live AQI + forecast + Action Day banners
-- **USGS Schuylkill River** hydrology gauges with embedded hydrographs
-- **NOAA Tides & Currents** (station 8545240) with live chart
-- **Windy.com** multi-layer radar / satellite / model overlays
-- System telemetry panel, mission clock (local + UTC), feed health strip
-- Persistent audio preference via `localStorage`
+## Layout
+| Zone | Content |
+|------|---------|
+| **Left** | NWS PA alerts · Surface obs · PHI AFD · Telemetry |
+| **Center** | Radar array (full Windy layers) · Satellite/model array (full Windy layers) |
+| **Right** | 7-day + hourly forecast · Air quality · Hydrology · NOAA tides |
 
-## Focus area
+## Windy layers
+Both map panels expose the full catalog from the Windy layer picker (grouped):
+- Radar / Satellite
+- Wind (wind, gusts, accumulation, pressure)
+- Temperature (temp, dewpoint, humidity, wet-bulb)
+- Solar (solar power, UV)
+- Rain / Snow (rain, accumulation, snow, depth, precip type, thunderstorms)
+- Clouds / Aviation (clouds, high/med/low, fog, tops, base, visibility, CAPE, thermals, icing, freezing level, CAT)
+- Waves / Sea (waves, swell, wind waves, SST, currents, tidal, wave power)
+- Air Quality (AQI, NO₂, PM2.5, aerosol, ozone, SO₂, surface O₃, CO, dust)
+- Warnings / Hazards (drought, fire, weather warnings, avalanche, extreme)
 
-- **Coordinates:** 40.0759°N, 75.2996°W  
-- **ZIP:** 19428 (Conshohocken, PA)  
-- **CWA:** Philadelphia (PHI)
+## Alerting
+Multi-tone system (Web Audio, no files) adapted from montcoxplr:
+- **Extreme** → urgent two-tone wail
+- **Severe / Moderate** → EMS-style rising chime
+- **Advisory / Minor** → neutral double-beep
 
-## Deploy (GitHub Pages)
+Enable **TONES ON** in the header (user gesture required). Preference persists in `localStorage`.
 
-1. Create / push to repo: `weatherxplr_enhanced_southeasternpa`
-2. Enable GitHub Pages (root or `/docs`)
-3. Site will be available at:  
-   `https://jasonsaro-ops.github.io/weatherxplr_enhanced_southeasternpa/`
+## Data cycle
+All primary feeds refresh every **120 seconds**. Focus: 40.0759°N, 75.2996°W · ZIP 19428 · PHI CWA.
 
-No build step required — pure static HTML/JS.
-
-## Files
-
-| File        | Purpose                          |
-|-------------|----------------------------------|
-| `index.html`| CAVE-themed shell + styles       |
-| `app.js`    | All data feeds, layout, audio    |
-| `README.md` | This file                        |
-
-## Alert tones
-
-Enable **TONES ON** in the command bar. New alerts that appear after the page has established a baseline will play the corresponding severity tone. The first load never triggers audio (baseline capture).
-
-## Credits / lineage
-
-- Base: weatherxplr (Cross-Synoptic Array)
-- Alert audio synthesis: montcoxplr Web Audio system
-- Data: NWS api.weather.gov, AirNow, USGS, NOAA Tides & Currents, Windy embed
+## Deploy
+Static site — push `index.html`, `app.js`, `README.md` to the repo root and enable GitHub Pages.

@@ -1,506 +1,280 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WEATHERXPLR ENHANCED // SE PA COMMAND ARRAY</title>
-    <meta name="description" content="Mission-critical weather command center for Southeastern Pennsylvania — NWS real-time feeds, hydrology, air quality, multi-tone alerting.">
-    
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
-    <!-- Golden Layout (CAVE-style multi-pane docking) -->
-    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-base.css" />
-    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-dark-theme.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WEATHERXPLR · SE-PA MISSION ARRAY</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-base.css" />
+<link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-dark-theme.css" />
+<style>
+/* ── THE MARTIAN / TERRITORY-INSPIRED MISSION CONTROL ── */
+:root {
+  --bg: #0b0d10;
+  --bg-panel: #101317;
+  --bg-elev: #161a1f;
+  --bg-header: #0e1114;
+  --line: #1e242c;
+  --line-bright: #2a323c;
+  --amber: #e8a317;
+  --amber-dim: #b87d0f;
+  --orange: #ff6b1a;
+  --cyan: #4ecdc4;
+  --blue: #5b9bd5;
+  --red: #e74c3c;
+  --green: #2ecc71;
+  --text: #d4d8de;
+  --text-dim: #7a8494;
+  --text-bright: #f0f2f5;
+  --critical: #3a1818;
+  --warn-bg: #2a2210;
+}
 
-    <style>
-        :root {
-            --bg-deep: #0a0e14;
-            --bg-panel: #0d1117;
-            --bg-elevated: #161b22;
-            --bg-header: #0f1419;
-            --border: #21262d;
-            --border-bright: #30363d;
-            --cyan: #00ffcc;
-            --cyan-dim: #00b38a;
-            --amber: #ffcc00;
-            --orange: #ff9900;
-            --red: #ff3333;
-            --red-bright: #ff5555;
-            --green: #00ff55;
-            --blue: #00ccff;
-            --text: #c9d1d9;
-            --text-dim: #8b949e;
-            --text-bright: #ffffff;
-            --critical-bg: #3d1a1a;
-            --warning-bg: #2d2416;
-            --ok-bg: #0d1f14;
-        }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
 
-        * { box-sizing: border-box; }
+/* ── HEADER ── */
+#cmd-bar {
+  height: 30px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--amber);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px; z-index: 300;
+}
+.cmd-group { display: flex; align-items: center; gap: 10px; }
+.sys-title {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
+  color: var(--amber); text-transform: uppercase;
+}
+.sys-title i { margin-right: 5px; opacity: 0.85; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg-elev); border: 1px solid var(--line-bright);
+  padding: 1px 7px; border-radius: 2px; font-size: 10px;
+  color: var(--text-dim); letter-spacing: 0.4px; cursor: default;
+  user-select: none; white-space: nowrap;
+}
+.chip.live { border-color: var(--green); color: var(--green); background: rgba(46,204,113,0.07); }
+.chip.alert-on { border-color: var(--red); color: var(--red); background: rgba(231,76,60,0.1); }
+.chip.audio-on { border-color: var(--green); color: var(--green); cursor: pointer; }
+.chip.audio-off { cursor: pointer; }
+.chip:hover.audio-on, .chip:hover.audio-off { filter: brightness(1.25); }
+.clock { color: var(--amber); font-variant-numeric: tabular-nums; font-size: 11px; letter-spacing: 0.5px; }
+.timer { color: var(--cyan); font-variant-numeric: tabular-nums; }
+.timer b { color: var(--text-bright); }
 
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: var(--bg-deep);
-            font-family: 'Share Tech Mono', 'IBM Plex Mono', monospace;
-            color: var(--cyan);
-            font-size: 13px;
-        }
+/* ── LAYOUT ── */
+#layout-root { width: 100%; height: calc(100vh - 30px - 22px); position: relative; }
 
-        /* ===== TOP COMMAND BAR (CAVE-style) ===== */
-        #command-bar {
-            height: 36px;
-            background: linear-gradient(180deg, #12181f 0%, var(--bg-header) 100%);
-            border-bottom: 2px solid var(--cyan);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 12px;
-            z-index: 200;
-            box-shadow: 0 2px 12px rgba(0, 255, 204, 0.15);
-        }
+/* ── FOOTER ── */
+#status-bar {
+  height: 22px; background: var(--bg-header); border-top: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px; font-size: 9.5px; color: var(--text-dim); z-index: 300;
+}
+.feed-row { display: flex; gap: 12px; }
+.dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+.dot.ok { background: var(--green); box-shadow: 0 0 3px var(--green); }
+.dot.err { background: var(--red); }
 
-        .cmd-left, .cmd-center, .cmd-right {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
+/* ── PANELS ── */
+.wcomp {
+  padding: 8px 9px; height: 100%; background: var(--bg-panel);
+  overflow-y: auto; overflow-x: hidden;
+}
+.wcomp::-webkit-scrollbar { width: 4px; }
+.wcomp::-webkit-scrollbar-track { background: var(--bg); }
+.wcomp::-webkit-scrollbar-thumb { background: var(--line-bright); border-radius: 2px; }
 
-        .system-title {
-            font-size: 0.95rem;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            text-shadow: 0 0 8px rgba(0, 255, 204, 0.6);
-            color: var(--cyan);
-            font-weight: 600;
-        }
+.phdr {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--line);
+  font-size: 10px; color: var(--amber); font-weight: 600; letter-spacing: 0.7px; text-transform: uppercase;
+}
+.phdr i { margin-right: 4px; }
 
-        .system-title i { margin-right: 6px; }
+/* Alerts */
+.alert-item {
+  border-left: 3px solid var(--red); background: var(--critical);
+  padding: 5px 7px; margin-bottom: 4px; border-radius: 1px; cursor: pointer;
+  transition: filter 0.12s;
+}
+.alert-item:hover { filter: brightness(1.12); }
+.alert-item.sev-extreme { border-left-color: #ff2020; background: #4a1515; }
+.alert-item.sev-severe { border-left-color: #e74c3c; background: #3a1818; }
+.alert-item.sev-moderate { border-left-color: #e67e22; background: #2a2210; }
+.alert-item.sev-minor { border-left-color: #f1c40f; background: #242010; }
+.alert-item.sev-unknown { border-left-color: #7a8494; background: #1a1e24; }
+.alert-title { font-weight: 600; text-transform: uppercase; font-size: 11px; }
+.alert-meta { color: var(--text-dim); font-size: 9.5px; margin-top: 1px; }
 
-        .status-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            background: var(--bg-elevated);
-            border: 1px solid var(--border-bright);
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 0.7rem;
-            color: var(--text-dim);
-            letter-spacing: 0.5px;
-            cursor: default;
-            user-select: none;
-        }
+/* Forecast */
+.fc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 5px; }
+.fc-card {
+  background: var(--bg-elev); border: 1px solid var(--line); padding: 6px;
+  text-align: center; border-radius: 2px; cursor: pointer; transition: border-color 0.15s;
+}
+.fc-card:hover { border-color: var(--amber); }
+.fc-card img { width: 32px; height: 32px; margin: 2px 0; }
+.t-hi { color: var(--orange); font-weight: 600; }
+.t-lo { color: var(--blue); font-weight: 600; }
 
-        .status-chip.live {
-            border-color: var(--green);
-            color: var(--green);
-            background: rgba(0, 255, 85, 0.08);
-        }
+.hr-strip { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; }
+.hr-card {
+  flex: 0 0 62px; background: var(--bg-elev); border: 1px solid var(--line);
+  border-radius: 2px; padding: 4px 2px; text-align: center; font-size: 10px;
+}
+.hr-card img { width: 24px; height: 24px; }
 
-        .status-chip.alert-active {
-            border-color: var(--red);
-            color: var(--red-bright);
-            background: rgba(255, 51, 51, 0.12);
-            animation: pulse-border 1.5s ease-in-out infinite;
-        }
+/* Obs */
+.obs-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 6px; background: var(--bg-elev); border: 1px solid var(--line);
+  border-radius: 2px; margin-bottom: 3px; font-size: 11px; cursor: pointer;
+}
+.obs-row:hover { border-color: var(--amber); }
+.obs-val { color: var(--cyan); font-weight: 600; font-size: 13px; }
+.obs-lbl { color: var(--text-dim); font-size: 9px; text-transform: uppercase; letter-spacing: 0.3px; }
 
-        .status-chip.audio-on {
-            border-color: var(--green);
-            color: var(--green);
-            background: rgba(0, 255, 85, 0.1);
-            cursor: pointer;
-        }
+/* AQI */
+.aqi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.aqi-cell {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 2px;
+  padding: 5px; text-align: center; cursor: pointer;
+}
+.aqi-cell:hover { border-color: var(--amber); }
 
-        .status-chip.audio-off {
-            border-color: var(--border-bright);
-            color: var(--text-dim);
-            cursor: pointer;
-        }
+/* Gauges */
+.g-card { background: var(--bg-elev); border: 1px solid var(--line); padding: 6px 7px; margin-bottom: 4px; border-radius: 2px; }
+.g-btn {
+  background: var(--bg); border: 1px solid var(--line-bright); color: var(--cyan);
+  padding: 3px 7px; border-radius: 2px; cursor: pointer; font-family: inherit;
+  font-size: 10px; width: 100%; text-align: left; margin-top: 3px;
+}
+.g-btn:hover { border-color: var(--cyan); background: rgba(78,205,196,0.06); }
 
-        .status-chip:hover.audio-off,
-        .status-chip:hover.audio-on {
-            filter: brightness(1.2);
-        }
+/* Telemetry */
+.tel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.tel-cell { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 2px; padding: 6px; text-align: center; }
+.tel-val { font-size: 14px; color: var(--cyan); font-weight: 600; }
+.tel-lbl { font-size: 8.5px; color: var(--text-dim); text-transform: uppercase; margin-top: 1px; }
 
-        @keyframes pulse-border {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0.4); }
-            50% { box-shadow: 0 0 0 3px rgba(255, 51, 51, 0.15); }
-        }
+/* Text product */
+.txt-prod {
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: 2px;
+  padding: 7px; font-size: 10px; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap; font-family: 'IBM Plex Mono', monospace;
+  max-height: 100%; overflow-y: auto;
+}
 
-        .mission-clock {
-            font-variant-numeric: tabular-nums;
-            color: var(--amber);
-            font-size: 0.8rem;
-            letter-spacing: 1px;
-        }
+/* Layer selector — compact multi-select style */
+.layer-bar {
+  position: absolute; top: 6px; left: 6px; right: 6px; z-index: 50;
+  display: flex; gap: 4px; flex-wrap: wrap; pointer-events: none;
+}
+.layer-bar select {
+  pointer-events: auto;
+  background: rgba(14,17,20,0.92); color: var(--amber);
+  border: 1px solid var(--amber-dim); padding: 2px 5px;
+  font-family: inherit; font-size: 10px; border-radius: 2px; cursor: pointer;
+  max-width: 160px;
+}
+.layer-bar select:focus { outline: 1px solid var(--amber); }
 
-        .timer-badge {
-            background: var(--bg-elevated);
-            padding: 2px 9px;
-            border: 1px solid var(--border-bright);
-            border-radius: 3px;
-            font-size: 0.75rem;
-            color: var(--cyan);
-            font-variant-numeric: tabular-nums;
-        }
+/* Modal */
+.modal-bg {
+  display: none; position: fixed; inset: 0; background: rgba(8,10,12,0.88);
+  backdrop-filter: blur(4px); z-index: 10000; justify-content: center; align-items: center;
+}
+.modal-box {
+  background: var(--bg-elev); border: 1px solid var(--amber); width: 94%;
+  max-width: 860px; max-height: 86vh; border-radius: 3px;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 0 30px rgba(232,163,23,0.12);
+}
+.modal-hd {
+  background: #1a1e24; padding: 8px 12px; border-bottom: 1px solid var(--line-bright);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.modal-title { font-size: 12px; font-weight: 600; color: var(--amber); text-transform: uppercase; letter-spacing: 0.8px; }
+.modal-x { color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 2px 6px; }
+.modal-x:hover { color: var(--red); }
+.modal-bd { padding: 12px; overflow-y: auto; color: var(--text-bright); font-size: 12px; }
 
-        .timer-badge span { color: var(--text-bright); font-weight: 600; }
-
-        /* ===== MAIN LAYOUT ===== */
-        #desktopLayoutContainer {
-            width: 100%;
-            height: calc(100vh - 36px - 28px);
-            position: relative;
-        }
-
-        /* ===== BOTTOM STATUS STRIP ===== */
-        #status-strip {
-            height: 28px;
-            background: var(--bg-header);
-            border-top: 1px solid var(--border-bright);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 12px;
-            font-size: 0.68rem;
-            color: var(--text-dim);
-            z-index: 200;
-        }
-
-        #status-strip .feed-status {
-            display: flex;
-            gap: 16px;
-        }
-
-        .feed-dot {
-            display: inline-block;
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            margin-right: 4px;
-            vertical-align: middle;
-        }
-
-        .feed-dot.ok { background: var(--green); box-shadow: 0 0 4px var(--green); }
-        .feed-dot.warn { background: var(--amber); }
-        .feed-dot.err { background: var(--red); }
-
-        /* ===== COMPONENT STYLES ===== */
-        .weather-component {
-            padding: 10px 12px;
-            height: 100%;
-            background: var(--bg-panel);
-            box-sizing: border-box;
-            overflow-y: auto;
-            overflow-x: hidden;
-        }
-
-        .weather-component::-webkit-scrollbar { width: 6px; }
-        .weather-component::-webkit-scrollbar-track { background: var(--bg-deep); }
-        .weather-component::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
-
-        .panel-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            padding-bottom: 6px;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.75rem;
-            color: var(--amber);
-            font-weight: 600;
-            letter-spacing: 0.8px;
-            text-transform: uppercase;
-        }
-
-        .panel-header i { margin-right: 5px; }
-
-        /* Alerts */
-        .alert-item {
-            border-left: 4px solid var(--red);
-            background: var(--critical-bg);
-            padding: 8px 10px;
-            margin-bottom: 6px;
-            border-radius: 2px;
-            cursor: pointer;
-            transition: filter 0.15s;
-        }
-        .alert-item:hover { filter: brightness(1.15); }
-        .alert-item.severity-extreme { border-left-color: #ff0000; background: #4a1212; }
-        .alert-item.severity-severe { border-left-color: #ff3333; background: #3d1a1a; }
-        .alert-item.severity-moderate { border-left-color: #ff9900; background: #2d2416; }
-        .alert-item.severity-minor { border-left-color: #ffcc00; background: #242016; }
-        .alert-item.severity-unknown { border-left-color: #8b949e; background: #1a1e24; }
-
-        .alert-title { color: var(--red-bright); font-weight: bold; text-transform: uppercase; font-size: 0.8rem; }
-        .alert-meta { color: var(--text-dim); font-size: 0.68rem; margin-top: 2px; }
-
-        /* Forecast */
-        .forecast-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-            gap: 8px;
-        }
-        .forecast-card {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            padding: 8px;
-            text-align: center;
-            border-radius: 3px;
-            cursor: pointer;
-            transition: border-color 0.2s, background 0.2s;
-        }
-        .forecast-card:hover { border-color: var(--cyan); background: #1a222d; }
-        .forecast-card img { width: 40px; height: 40px; margin: 4px 0; }
-        .temp-high { color: var(--orange); font-weight: bold; }
-        .temp-low { color: var(--blue); font-weight: bold; }
-
-        /* Hourly strip */
-        .hourly-strip {
-            display: flex;
-            gap: 6px;
-            overflow-x: auto;
-            padding-bottom: 6px;
-        }
-        .hourly-card {
-            flex: 0 0 72px;
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            padding: 6px 4px;
-            text-align: center;
-            font-size: 0.7rem;
-        }
-        .hourly-card img { width: 28px; height: 28px; }
-
-        /* AQI */
-        .aqi-station-row {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 10px;
-            margin-bottom: 10px;
-        }
-        .aqi-panel-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
-        .aqi-block-metric {
-            flex: 1;
-            min-width: 90px;
-            background: var(--bg-deep);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            padding: 8px;
-            text-align: center;
-        }
-        .aqi-score-callout { font-size: 1.8rem; font-weight: bold; margin: 2px 0; }
-        .aqi-pill-badge {
-            display: inline-block;
-            padding: 1px 7px;
-            border-radius: 10px;
-            font-size: 0.65rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            color: #000;
-        }
-
-        /* Gauges / hydro */
-        .gauge-card {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            padding: 8px 10px;
-            margin-bottom: 6px;
-            border-radius: 3px;
-        }
-        .gauge-btn {
-            background: var(--bg-deep);
-            border: 1px solid var(--border-bright);
-            color: var(--cyan);
-            padding: 5px 10px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 0.72rem;
-            width: 100%;
-            text-align: left;
-            margin-top: 4px;
-            transition: all 0.15s;
-        }
-        .gauge-btn:hover { background: rgba(0,255,204,0.08); border-color: var(--cyan); }
-
-        /* Observation rows */
-        .obs-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 8px;
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            margin-bottom: 5px;
-            font-size: 0.75rem;
-        }
-        .obs-row .obs-val { color: var(--cyan); font-weight: 600; font-size: 0.9rem; }
-        .obs-label { color: var(--text-dim); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px; }
-
-        /* Discussion / text product */
-        .text-product {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            padding: 10px;
-            font-size: 0.72rem;
-            line-height: 1.55;
-            color: var(--text);
-            white-space: pre-wrap;
-            font-family: 'IBM Plex Mono', monospace;
-            max-height: 100%;
-            overflow-y: auto;
-        }
-
-        /* System telemetry */
-        .telemetry-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-        .telemetry-cell {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            padding: 8px;
-            text-align: center;
-        }
-        .telemetry-cell .t-val { font-size: 1.1rem; color: var(--cyan); font-weight: 600; }
-        .telemetry-cell .t-label { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; margin-top: 2px; }
-
-        /* Modal */
-        .hub-modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 14, 20, 0.88);
-            backdrop-filter: blur(5px);
-            z-index: 10000;
-            justify-content: center;
-            align-items: center;
-        }
-        .hub-modal-content {
-            background: var(--bg-elevated);
-            border: 2px solid var(--cyan);
-            width: 95%;
-            max-width: 900px;
-            max-height: 88vh;
-            border-radius: 4px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            box-shadow: 0 0 40px rgba(0, 255, 204, 0.2);
-        }
-        .hub-modal-header {
-            background: #1a222d;
-            padding: 10px 16px;
-            border-bottom: 1px solid var(--border-bright);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .hub-modal-title { font-size: 0.95rem; font-weight: bold; color: var(--cyan); text-transform: uppercase; letter-spacing: 1px; }
-        .hub-modal-close { color: var(--text-dim); cursor: pointer; font-size: 1.1rem; padding: 4px 8px; }
-        .hub-modal-close:hover { color: var(--red-bright); }
-        .hub-modal-body { padding: 16px; overflow-y: auto; color: var(--text-bright); }
-
-        /* Golden Layout CAVE overrides */
-        .lm_header { background: #12181f !important; height: 28px !important; }
-        .lm_tab {
-            background: #1a222d !important;
-            color: var(--text-dim) !important;
-            font-family: 'Share Tech Mono', monospace !important;
-            font-size: 0.68rem !important;
-            border: 1px solid var(--border) !important;
-            padding: 0 10px !important;
-            letter-spacing: 0.3px;
-        }
-        .lm_tab.lm_active {
-            background: var(--bg-panel) !important;
-            color: var(--cyan) !important;
-            border-bottom: none !important;
-            box-shadow: 0 -2px 0 var(--cyan) inset !important;
-        }
-        .lm_content { background: var(--bg-panel) !important; border: 1px solid #151a21; }
-        .lm_splitter { background: #1a222d !important; }
-        .lm_splitter:hover { background: var(--cyan) !important; opacity: 0.4; }
-        .lm_header .lm_controls > li { filter: invert(0.7); }
-
-        /* Layer select overlays */
-        .layer-select {
-            background: rgba(22, 27, 34, 0.92);
-            color: var(--cyan);
-            border: 1px solid var(--cyan);
-            padding: 4px 8px;
-            font-family: inherit;
-            font-size: 0.72rem;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-    </style>
+/* Golden Layout — Martian overrides */
+.lm_header { background: #0e1114 !important; height: 24px !important; }
+.lm_tab {
+  background: #161a1f !important; color: var(--text-dim) !important;
+  font-family: 'IBM Plex Mono', monospace !important; font-size: 9.5px !important;
+  border: 1px solid var(--line) !important; padding: 0 8px !important; letter-spacing: 0.3px;
+}
+.lm_tab.lm_active {
+  background: var(--bg-panel) !important; color: var(--amber) !important;
+  border-bottom: none !important; box-shadow: 0 -1.5px 0 var(--amber) inset !important;
+}
+.lm_content { background: var(--bg-panel) !important; border: 1px solid #12151a; }
+.lm_splitter { background: #161a1f !important; }
+.lm_splitter:hover { background: var(--amber) !important; opacity: 0.35; }
+.lm_header .lm_controls > li { filter: invert(0.55) sepia(1) saturate(2) hue-rotate(5deg); }
+</style>
 </head>
 <body>
 
-    <!-- COMMAND BAR -->
-    <div id="command-bar">
-        <div class="cmd-left">
-            <div class="system-title"><i class="fa-solid fa-satellite-dish"></i> WEATHERXPLR // SE-PA COMMAND ARRAY</div>
-            <div class="status-chip live" id="sys-status"><span class="feed-dot ok"></span> SYSTEM ONLINE</div>
-        </div>
-        <div class="cmd-center">
-            <div class="mission-clock" id="mission-clock">--:--:--</div>
-            <div class="status-chip" id="alert-count-chip">ALERTS: <span id="alert-count">0</span></div>
-            <div class="status-chip audio-off" id="audio-toggle-btn" title="Toggle multi-tone alert system (Fire / EMS / Advisory tones)">
-                <i class="fa-solid fa-volume-xmark" id="audio-icon"></i>
-                <span id="lbl-audio">TONES OFF</span>
-            </div>
-        </div>
-        <div class="cmd-right">
-            <div class="timer-badge">CYCLE <span id="countdown">120</span>s</div>
-            <div class="status-chip" id="last-sync">LAST SYNC: --</div>
-        </div>
+<div id="cmd-bar">
+  <div class="cmd-group">
+    <div class="sys-title"><i class="fa-solid fa-satellite"></i> WEATHERXPLR · SE-PA MISSION ARRAY</div>
+    <div class="chip live" id="sys-status"><span class="dot ok"></span>ONLINE</div>
+  </div>
+  <div class="cmd-group">
+    <div class="clock" id="mission-clock">--:--:--</div>
+    <div class="chip" id="alert-chip">ALERTS <b id="alert-count">0</b></div>
+    <div class="chip audio-off" id="audio-toggle-btn" title="Alert tones (Extreme / Severe / Advisory)">
+      <i class="fa-solid fa-volume-xmark" id="audio-icon"></i>
+      <span id="lbl-audio">TONES OFF</span>
     </div>
+  </div>
+  <div class="cmd-group">
+    <div class="chip timer">CYCLE <b id="countdown">120</b>s</div>
+    <div class="chip" id="last-sync">SYNC --</div>
+  </div>
+</div>
 
-    <div id="desktopLayoutContainer"></div>
+<div id="layout-root"></div>
 
-    <!-- STATUS STRIP -->
-    <div id="status-strip">
-        <div class="feed-status">
-            <span><span class="feed-dot ok" id="dot-nws"></span>NWS</span>
-            <span><span class="feed-dot ok" id="dot-aqi"></span>AIRNOW</span>
-            <span><span class="feed-dot ok" id="dot-hydro"></span>USGS</span>
-            <span><span class="feed-dot ok" id="dot-tides"></span>NOAA TIDES</span>
-            <span><span class="feed-dot ok" id="dot-obs"></span>OBS</span>
-        </div>
-        <div>
-            <span id="location-label">FOCUS: 40.0759°N 75.2996°W · 19428 CONSHOHOCKEN · PHI CWA</span>
-        </div>
-        <div id="build-label">WEATHERXPLR ENHANCED · SE-PA · CAVE MODE</div>
+<div id="status-bar">
+  <div class="feed-row">
+    <span><span class="dot ok" id="dot-nws"></span>NWS</span>
+    <span><span class="dot ok" id="dot-aqi"></span>AIRNOW</span>
+    <span><span class="dot ok" id="dot-hydro"></span>USGS</span>
+    <span><span class="dot ok" id="dot-tides"></span>TIDES</span>
+    <span><span class="dot ok" id="dot-obs"></span>OBS</span>
+  </div>
+  <div>40.0759°N 75.2996°W · 19428 · PHI CWA</div>
+  <div>WEATHERXPLR ENHANCED · MARTIAN MODE</div>
+</div>
+
+<div id="hubModal" class="modal-bg">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <div id="modalTitle" class="modal-title">TELEMETRY</div>
+      <div class="modal-x" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></div>
     </div>
+    <div id="modalBody" class="modal-bd"></div>
+  </div>
+</div>
 
-    <!-- FLOATING MODAL -->
-    <div id="hubFloatingModal" class="hub-modal">
-        <div class="hub-modal-content">
-            <div class="hub-modal-header">
-                <div id="modalTitle" class="hub-modal-title">Telemetry Stream</div>
-                <div class="hub-modal-close" onclick="closeFloatingModal()"><i class="fa-solid fa-xmark"></i></div>
-            </div>
-            <div id="modalBody" class="hub-modal-body">Loading secure feed packets...</div>
-        </div>
-    </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/dist/goldenlayout.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/dist/goldenlayout.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
