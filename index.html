@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WEATHERXPLR ENHANCED // SE PA COMMAND ARRAY</title>
+    <meta name="description" content="Mission-critical weather command center for Southeastern Pennsylvania — NWS real-time feeds, hydrology, air quality, multi-tone alerting.">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Golden Layout (CAVE-style multi-pane docking) -->
+    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-base.css" />
+    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-dark-theme.css" />
+
+    <style>
+        :root {
+            --bg-deep: #0a0e14;
+            --bg-panel: #0d1117;
+            --bg-elevated: #161b22;
+            --bg-header: #0f1419;
+            --border: #21262d;
+            --border-bright: #30363d;
+            --cyan: #00ffcc;
+            --cyan-dim: #00b38a;
+            --amber: #ffcc00;
+            --orange: #ff9900;
+            --red: #ff3333;
+            --red-bright: #ff5555;
+            --green: #00ff55;
+            --blue: #00ccff;
+            --text: #c9d1d9;
+            --text-dim: #8b949e;
+            --text-bright: #ffffff;
+            --critical-bg: #3d1a1a;
+            --warning-bg: #2d2416;
+            --ok-bg: #0d1f14;
+        }
+
+        * { box-sizing: border-box; }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-deep);
+            font-family: 'Share Tech Mono', 'IBM Plex Mono', monospace;
+            color: var(--cyan);
+            font-size: 13px;
+        }
+
+        /* ===== TOP COMMAND BAR (CAVE-style) ===== */
+        #command-bar {
+            height: 36px;
+            background: linear-gradient(180deg, #12181f 0%, var(--bg-header) 100%);
+            border-bottom: 2px solid var(--cyan);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            z-index: 200;
+            box-shadow: 0 2px 12px rgba(0, 255, 204, 0.15);
+        }
+
+        .cmd-left, .cmd-center, .cmd-right {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .system-title {
+            font-size: 0.95rem;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(0, 255, 204, 0.6);
+            color: var(--cyan);
+            font-weight: 600;
+        }
+
+        .system-title i { margin-right: 6px; }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-bright);
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+            cursor: default;
+            user-select: none;
+        }
+
+        .status-chip.live {
+            border-color: var(--green);
+            color: var(--green);
+            background: rgba(0, 255, 85, 0.08);
+        }
+
+        .status-chip.alert-active {
+            border-color: var(--red);
+            color: var(--red-bright);
+            background: rgba(255, 51, 51, 0.12);
+            animation: pulse-border 1.5s ease-in-out infinite;
+        }
+
+        .status-chip.audio-on {
+            border-color: var(--green);
+            color: var(--green);
+            background: rgba(0, 255, 85, 0.1);
+            cursor: pointer;
+        }
+
+        .status-chip.audio-off {
+            border-color: var(--border-bright);
+            color: var(--text-dim);
+            cursor: pointer;
+        }
+
+        .status-chip:hover.audio-off,
+        .status-chip:hover.audio-on {
+            filter: brightness(1.2);
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0.4); }
+            50% { box-shadow: 0 0 0 3px rgba(255, 51, 51, 0.15); }
+        }
+
+        .mission-clock {
+            font-variant-numeric: tabular-nums;
+            color: var(--amber);
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+        }
+
+        .timer-badge {
+            background: var(--bg-elevated);
+            padding: 2px 9px;
+            border: 1px solid var(--border-bright);
+            border-radius: 3px;
+            font-size: 0.75rem;
+            color: var(--cyan);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .timer-badge span { color: var(--text-bright); font-weight: 600; }
+
+        /* ===== MAIN LAYOUT ===== */
+        #desktopLayoutContainer {
+            width: 100%;
+            height: calc(100vh - 36px - 28px);
+            position: relative;
+        }
+
+        /* ===== BOTTOM STATUS STRIP ===== */
+        #status-strip {
+            height: 28px;
+            background: var(--bg-header);
+            border-top: 1px solid var(--border-bright);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            z-index: 200;
+        }
+
+        #status-strip .feed-status {
+            display: flex;
+            gap: 16px;
+        }
+
+        .feed-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+
+        .feed-dot.ok { background: var(--green); box-shadow: 0 0 4px var(--green); }
+        .feed-dot.warn { background: var(--amber); }
+        .feed-dot.err { background: var(--red); }
+
+        /* ===== COMPONENT STYLES ===== */
+        .weather-component {
+            padding: 10px 12px;
+            height: 100%;
+            background: var(--bg-panel);
+            box-sizing: border-box;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .weather-component::-webkit-scrollbar { width: 6px; }
+        .weather-component::-webkit-scrollbar-track { background: var(--bg-deep); }
+        .weather-component::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--amber);
+            font-weight: 600;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+
+        .panel-header i { margin-right: 5px; }
+
+        /* Alerts */
+        .alert-item {
+            border-left: 4px solid var(--red);
+            background: var(--critical-bg);
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: filter 0.15s;
+        }
+        .alert-item:hover { filter: brightness(1.15); }
+        .alert-item.severity-extreme { border-left-color: #ff0000; background: #4a1212; }
+        .alert-item.severity-severe { border-left-color: #ff3333; background: #3d1a1a; }
+        .alert-item.severity-moderate { border-left-color: #ff9900; background: #2d2416; }
+        .alert-item.severity-minor { border-left-color: #ffcc00; background: #242016; }
+        .alert-item.severity-unknown { border-left-color: #8b949e; background: #1a1e24; }
+
+        .alert-title { color: var(--red-bright); font-weight: bold; text-transform: uppercase; font-size: 0.8rem; }
+        .alert-meta { color: var(--text-dim); font-size: 0.68rem; margin-top: 2px; }
+
+        /* Forecast */
+        .forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 8px;
+        }
+        .forecast-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            padding: 8px;
+            text-align: center;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .forecast-card:hover { border-color: var(--cyan); background: #1a222d; }
+        .forecast-card img { width: 40px; height: 40px; margin: 4px 0; }
+        .temp-high { color: var(--orange); font-weight: bold; }
+        .temp-low { color: var(--blue); font-weight: bold; }
+
+        /* Hourly strip */
+        .hourly-strip {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 6px;
+        }
+        .hourly-card {
+            flex: 0 0 72px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 6px 4px;
+            text-align: center;
+            font-size: 0.7rem;
+        }
+        .hourly-card img { width: 28px; height: 28px; }
+
+        /* AQI */
+        .aqi-station-row {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .aqi-panel-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
+        .aqi-block-metric {
+            flex: 1;
+            min-width: 90px;
+            background: var(--bg-deep);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 8px;
+            text-align: center;
+        }
+        .aqi-score-callout { font-size: 1.8rem; font-weight: bold; margin: 2px 0; }
+        .aqi-pill-badge {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #000;
+        }
+
+        /* Gauges / hydro */
+        .gauge-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            border-radius: 3px;
+        }
+        .gauge-btn {
+            background: var(--bg-deep);
+            border: 1px solid var(--border-bright);
+            color: var(--cyan);
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.72rem;
+            width: 100%;
+            text-align: left;
+            margin-top: 4px;
+            transition: all 0.15s;
+        }
+        .gauge-btn:hover { background: rgba(0,255,204,0.08); border-color: var(--cyan); }
+
+        /* Observation rows */
+        .obs-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            margin-bottom: 5px;
+            font-size: 0.75rem;
+        }
+        .obs-row .obs-val { color: var(--cyan); font-weight: 600; font-size: 0.9rem; }
+        .obs-label { color: var(--text-dim); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* Discussion / text product */
+        .text-product {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 10px;
+            font-size: 0.72rem;
+            line-height: 1.55;
+            color: var(--text);
+            white-space: pre-wrap;
+            font-family: 'IBM Plex Mono', monospace;
+            max-height: 100%;
+            overflow-y: auto;
+        }
+
+        /* System telemetry */
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .telemetry-cell {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 8px;
+            text-align: center;
+        }
+        .telemetry-cell .t-val { font-size: 1.1rem; color: var(--cyan); font-weight: 600; }
+        .telemetry-cell .t-label { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; margin-top: 2px; }
+
+        /* Modal */
+        .hub-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 14, 20, 0.88);
+            backdrop-filter: blur(5px);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+        }
+        .hub-modal-content {
+            background: var(--bg-elevated);
+            border: 2px solid var(--cyan);
+            width: 95%;
+            max-width: 900px;
+            max-height: 88vh;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0, 255, 204, 0.2);
+        }
+        .hub-modal-header {
+            background: #1a222d;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border-bright);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .hub-modal-title { font-size: 0.95rem; font-weight: bold; color: var(--cyan); text-transform: uppercase; letter-spacing: 1px; }
+        .hub-modal-close { color: var(--text-dim); cursor: pointer; font-size: 1.1rem; padding: 4px 8px; }
+        .hub-modal-close:hover { color: var(--red-bright); }
+        .hub-modal-body { padding: 16px; overflow-y: auto; color: var(--text-bright); }
+
+        /* Golden Layout CAVE overrides */
+        .lm_header { background: #12181f !important; height: 28px !important; }
+        .lm_tab {
+            background: #1a222d !important;
+            color: var(--text-dim) !important;
+            font-family: 'Share Tech Mono', monospace !important;
+            font-size: 0.68rem !important;
+            border: 1px solid var(--border) !important;
+            padding: 0 10px !important;
+            letter-spacing: 0.3px;
+        }
+        .lm_tab.lm_active {
+            background: var(--bg-panel) !important;
+            color: var(--cyan) !important;
+            border-bottom: none !important;
+            box-shadow: 0 -2px 0 var(--cyan) inset !important;
+        }
+        .lm_content { background: var(--bg-panel) !important; border: 1px solid #151a21; }
+        .lm_splitter { background: #1a222d !important; }
+        .lm_splitter:hover { background: var(--cyan) !important; opacity: 0.4; }
+        .lm_header .lm_controls > li { filter: invert(0.7); }
+
+        /* Layer select overlays */
+        .layer-select {
+            background: rgba(22, 27, 34, 0.92);
+            color: var(--cyan);
+            border: 1px solid var(--cyan);
+            padding: 4px 8px;
+            font-family: inherit;
+            font-size: 0.72rem;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- COMMAND BAR -->
+    <div id="command-bar">
+        <div class="cmd-left">
+            <div class="system-title"><i class="fa-solid fa-satellite-dish"></i> WEATHERXPLR // SE-PA COMMAND ARRAY</div>
+            <div class="status-chip live" id="sys-status"><span class="feed-dot ok"></span> SYSTEM ONLINE</div>
+        </div>
+        <div class="cmd-center">
+            <div class="mission-clock" id="mission-clock">--:--:--</div>
+            <div class="status-chip" id="alert-count-chip">ALERTS: <span id="alert-count">0</span></div>
+            <div class="status-chip audio-off" id="audio-toggle-btn" title="Toggle multi-tone alert system (Fire / EMS / Advisory tones)">
+                <i class="fa-solid fa-volume-xmark" id="audio-icon"></i>
+                <span id="lbl-audio">TONES OFF</span>
+            </div>
+        </div>
+        <div class="cmd-right">
+            <div class="timer-badge">CYCLE <span id="countdown">120</span>s</div>
+            <div class="status-chip" id="last-sync">LAST SYNC: --</div>
+        </div>
+    </div>
+
+    <div id="desktopLayoutContainer"></div>
+
+    <!-- STATUS STRIP -->
+    <div id="status-strip">
+        <div class="feed-status">
+            <span><span class="feed-dot ok" id="dot-nws"></span>NWS</span>
+            <span><span class="feed-dot ok" id="dot-aqi"></span>AIRNOW</span>
+            <span><span class="feed-dot ok" id="dot-hydro"></span>USGS</span>
+            <span><span class="feed-dot ok" id="dot-tides"></span>NOAA TIDES</span>
+            <span><span class="feed-dot ok" id="dot-obs"></span>OBS</span>
+        </div>
+        <div>
+            <span id="location-label">FOCUS: 40.0759°N 75.2996°W · 19428 CONSHOHOCKEN · PHI CWA</span>
+        </div>
+        <div id="build-label">WEATHERXPLR ENHANCED · SE-PA · CAVE MODE</div>
+    </div>
+
+    <!-- FLOATING MODAL -->
+    <div id="hubFloatingModal" class="hub-modal">
+        <div class="hub-modal-content">
+            <div class="hub-modal-header">
+                <div id="modalTitle" class="hub-modal-title">Telemetry Stream</div>
+                <div class="hub-modal-close" onclick="closeFloatingModal()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div id="modalBody" class="hub-modal-body">Loading secure feed packets...</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/dist/goldenlayout.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
