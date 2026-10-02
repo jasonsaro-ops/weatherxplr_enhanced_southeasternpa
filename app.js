@@ -415,26 +415,23 @@ async function fetchAQI() {
     const c = data.current || {};
     aqiCache = { current: c, hourly: data.hourly || null };
     const cat = aqiCategory(c.us_aqi);
-    const cells = [
-      { lab: "US AQI", val: c.us_aqi != null ? c.us_aqi : "—", color: cat.color, sub: cat.name },
-      { lab: "PM2.5", val: c.pm2_5 != null ? c.pm2_5.toFixed(1) : "—", color: cat.color, sub: "μg/m³" },
-      { lab: "PM10", val: c.pm10 != null ? c.pm10.toFixed(1) : "—", color: "#8ea1b3", sub: "μg/m³" },
-      { lab: "Ozone", val: c.ozone != null ? Math.round(c.ozone) : "—", color: "#8ea1b3", sub: "μg/m³" },
-      { lab: "NO₂", val: c.nitrogen_dioxide != null ? c.nitrogen_dioxide.toFixed(1) : "—", color: "#8ea1b3", sub: "μg/m³" },
-      { lab: "SO₂", val: c.sulphur_dioxide != null ? c.sulphur_dioxide.toFixed(1) : "—", color: "#8ea1b3", sub: "μg/m³" },
-      { lab: "CO", val: c.carbon_monoxide != null ? Math.round(c.carbon_monoxide) : "—", color: "#8ea1b3", sub: "μg/m³" },
-      { lab: "EAQI", val: c.european_aqi != null ? c.european_aqi : "—", color: "#8ea1b3", sub: "EU index" }
+    const rows = [
+      { lab: "US AQI", val: c.us_aqi != null ? String(c.us_aqi) : "—", sub: cat.name, color: cat.color },
+      { lab: "PM2.5", val: c.pm2_5 != null ? c.pm2_5.toFixed(1) : "—", sub: "μg/m³", color: cat.color },
+      { lab: "PM10", val: c.pm10 != null ? c.pm10.toFixed(1) : "—", sub: "μg/m³", color: "var(--text-hi)" },
+      { lab: "Ozone", val: c.ozone != null ? String(Math.round(c.ozone)) : "—", sub: "μg/m³", color: "var(--text-hi)" },
+      { lab: "NO₂", val: c.nitrogen_dioxide != null ? c.nitrogen_dioxide.toFixed(1) : "—", sub: "μg/m³", color: "var(--text-hi)" },
+      { lab: "SO₂", val: c.sulphur_dioxide != null ? c.sulphur_dioxide.toFixed(1) : "—", sub: "μg/m³", color: "var(--text-hi)" },
+      { lab: "CO", val: c.carbon_monoxide != null ? String(Math.round(c.carbon_monoxide)) : "—", sub: "μg/m³", color: "var(--text-hi)" }
     ];
-    let html = `<div class="g2">`;
-    cells.forEach((x) => {
-      html += `<div class="aqi-cell" onclick="openAQI()">
-        <div class="lab">${x.lab}</div>
-        <div class="aqi-n" style="color:${x.color}">${x.val}</div>
-        <div class="aqi-l" style="color:${x.color}">${x.sub}</div>
+    let html = "";
+    rows.forEach((x) => {
+      html += `<div class="row-item" onclick="openAQI()">
+        <div><div class="nm">${x.lab}</div><div class="sub">${x.sub}</div></div>
+        <div class="rv" style="color:${x.color}">${x.val}</div>
       </div>`;
     });
-    html += `</div>`;
-    html += `<div style="margin-top:6px;font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">${c.time || "—"} · Open-Meteo AQ</div>`;
+    html += `<div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono);margin-top:2px">${c.time || "—"} · Open-Meteo AQ</div>`;
     $("panel-aqi").innerHTML = html;
   } catch (e) {
     setFeed("aqi", false);
@@ -496,7 +493,7 @@ async function fetchTides() {
       <div class="metric"><div class="lab">MLLW</div><div class="val">${last ? last.v + " ft" : "—"}</div></div>
       <div class="metric"><div class="lab">Air</div><div class="val">${la ? la.v + "°F" : "—"}</div></div>
     </div>
-    <div style="height:120px;position:relative"><canvas id="tide-chart"></canvas></div>`;
+    <div style="height:100px;position:relative;min-height:80px"><canvas id="tide-chart"></canvas></div>`;
     $("panel-tides").innerHTML = html;
 
     const labels = (wl.data || []).map(d => d.t.split(" ")[1].slice(0, 5));
