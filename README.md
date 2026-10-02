@@ -2,7 +2,7 @@
 
 Dense, always-on weather operations display for Southeastern Pennsylvania.
 
-**Stack:** NWS API · Open-Meteo · AirNow · USGS · NOAA Tides · Windy embed  
+**Stack:** NWS API · Open-Meteo · Open-Meteo AQ · USGS · NOAA Tides · Windy embed  
 **Cycle:** 120 seconds full refresh  
 **Focus:** 40.0759°N, 75.2996°W · ZIP 19428 · PHI CWA
 

@@ -3,7 +3,6 @@
  * Dense ops-console dashboard · NWS + Open-Meteo · single radar · tiered tones
  */
 const LAT = 40.0759, LON = -75.2996, ZIP = "19428";
-const AIRNOW_KEY = "E5AFEF36-80F6-4A42-AE38-F3C56E3AEAC4";
 const CYCLE = 120;
 
 const GAUGES = [
@@ -395,42 +394,72 @@ window.openObs = function (id, name) {
     ${p.rawMessage ? `<pre style="margin-top:10px;background:var(--raise);padding:10px;font-size:11px;overflow:auto">${p.rawMessage}</pre>` : ""}`);
 };
 
-/* ── AQI ── */
+/* ── AQI (Open-Meteo Air Quality — AirNow API retired 2026-10-01) ── */
+function aqiCategory(usAqi) {
+  if (usAqi == null || usAqi < 0) return { n: 0, name: "—", color: "#8ea1b3" };
+  if (usAqi <= 50) return { n: 1, name: "Good", color: "#00e400" };
+  if (usAqi <= 100) return { n: 2, name: "Moderate", color: "#ffff00" };
+  if (usAqi <= 150) return { n: 3, name: "Unhealthy SG", color: "#ff7e00" };
+  if (usAqi <= 200) return { n: 4, name: "Unhealthy", color: "#ff0000" };
+  if (usAqi <= 300) return { n: 5, name: "Very Unhealthy", color: "#8f3f97" };
+  return { n: 6, name: "Hazardous", color: "#7e0023" };
+}
+
 async function fetchAQI() {
   try {
-    const url = `https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode=${ZIP}&distance=25&API_KEY=${AIRNOW_KEY}`;
+    const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LON}` +
+      `&current=us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,european_aqi` +
+      `&hourly=pm10,pm2_5,us_aqi&timezone=America%2FNew_York&forecast_days=2`;
     const data = await fetch(url).then(r => r.json());
     setFeed("aqi", true);
-    aqiCache = {};
-    if (!data || !data.length) {
-      $("panel-aqi").innerHTML = `<span class="err">No AQI data</span>`;
-      return;
-    }
-    const colors = { 1: "#00e400", 2: "#ffff00", 3: "#ff7e00", 4: "#ff0000", 5: "#8f3f97", 6: "#7e0023" };
+    const c = data.current || {};
+    aqiCache = { current: c, hourly: data.hourly || null };
+    const cat = aqiCategory(c.us_aqi);
+    const cells = [
+      { lab: "US AQI", val: c.us_aqi != null ? c.us_aqi : "—", color: cat.color, sub: cat.name },
+      { lab: "PM2.5", val: c.pm2_5 != null ? c.pm2_5.toFixed(1) : "—", color: cat.color, sub: "μg/m³" },
+      { lab: "PM10", val: c.pm10 != null ? c.pm10.toFixed(1) : "—", color: "#8ea1b3", sub: "μg/m³" },
+      { lab: "Ozone", val: c.ozone != null ? Math.round(c.ozone) : "—", color: "#8ea1b3", sub: "μg/m³" },
+      { lab: "NO₂", val: c.nitrogen_dioxide != null ? c.nitrogen_dioxide.toFixed(1) : "—", color: "#8ea1b3", sub: "μg/m³" },
+      { lab: "SO₂", val: c.sulphur_dioxide != null ? c.sulphur_dioxide.toFixed(1) : "—", color: "#8ea1b3", sub: "μg/m³" },
+      { lab: "CO", val: c.carbon_monoxide != null ? Math.round(c.carbon_monoxide) : "—", color: "#8ea1b3", sub: "μg/m³" },
+      { lab: "EAQI", val: c.european_aqi != null ? c.european_aqi : "—", color: "#8ea1b3", sub: "EU index" }
+    ];
     let html = `<div class="g2">`;
-    data.forEach((p, i) => {
-      const n = p.Category && p.Category.Number;
-      const col = colors[n] || "#8ea1b3";
-      aqiCache[i] = p;
-      html += `<div class="aqi-cell" onclick="openAQI(${i})">
-        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase">${p.ParameterName}</div>
-        <div class="aqi-n" style="color:${col}">${p.AQI}</div>
-        <div class="aqi-l" style="color:${col}">${p.Category && p.Category.Name || ""}</div>
+    cells.forEach((x, i) => {
+      html += `<div class="aqi-cell" onclick="openAQI()">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase">${x.lab}</div>
+        <div class="aqi-n" style="color:${x.color}">${x.val}</div>
+        <div class="aqi-l" style="color:${x.color}">${x.sub}</div>
       </div>`;
     });
     html += `</div>`;
+    html += `<div style="margin-top:6px;font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">${c.time || "—"} · Open-Meteo AQ (AirNow retired)</div>`;
     $("panel-aqi").innerHTML = html;
   } catch (e) {
     setFeed("aqi", false);
-    $("panel-aqi").innerHTML = `<span class="err">AirNow timeout</span>`;
+    $("panel-aqi").innerHTML = `<span class="err">Air quality timeout</span>`;
+    console.error(e);
   }
 }
-window.openAQI = function (i) {
-  const p = aqiCache[i];
-  if (!p) return;
-  openModal(`${p.ParameterName} · AQI ${p.AQI}`, `
-    <div class="metric"><div class="lab">Category</div><div class="val">${p.Category && p.Category.Name || "—"}</div></div>
-    <div style="margin-top:10px;color:var(--text-dim)">${p.ReportingArea || ""}, ${p.StateCode || ""} · ${p.DateObserved || ""} ${p.HourObserved != null ? p.HourObserved + ":00" : ""}</div>`);
+window.openAQI = function () {
+  const c = aqiCache.current;
+  if (!c) return;
+  const cat = aqiCategory(c.us_aqi);
+  openModal(`Air Quality · US AQI ${c.us_aqi ?? "—"}`, `
+    <div style="margin-bottom:12px;font-size:15px;font-weight:700;color:${cat.color}">${cat.name}</div>
+    <div class="g2">
+      <div class="metric"><div class="lab">US AQI</div><div class="val">${c.us_aqi ?? "—"}</div></div>
+      <div class="metric"><div class="lab">European AQI</div><div class="val">${c.european_aqi ?? "—"}</div></div>
+      <div class="metric"><div class="lab">PM2.5</div><div class="val">${c.pm2_5 != null ? c.pm2_5 + " μg/m³" : "—"}</div></div>
+      <div class="metric"><div class="lab">PM10</div><div class="val">${c.pm10 != null ? c.pm10 + " μg/m³" : "—"}</div></div>
+      <div class="metric"><div class="lab">Ozone</div><div class="val">${c.ozone != null ? c.ozone + " μg/m³" : "—"}</div></div>
+      <div class="metric"><div class="lab">NO₂</div><div class="val">${c.nitrogen_dioxide != null ? c.nitrogen_dioxide + " μg/m³" : "—"}</div></div>
+      <div class="metric"><div class="lab">SO₂</div><div class="val">${c.sulphur_dioxide != null ? c.sulphur_dioxide + " μg/m³" : "—"}</div></div>
+      <div class="metric"><div class="lab">CO</div><div class="val">${c.carbon_monoxide != null ? c.carbon_monoxide + " μg/m³" : "—"}</div></div>
+    </div>
+    <div style="margin-top:12px;color:var(--text-dim);font-size:12px">Observed ${c.time || "—"} · Source: Open-Meteo Air Quality API<br>
+    EPA AirNow observation web services were retired 1 Oct 2026.</div>`);
 };
 
 /* ── Hydro ── */
