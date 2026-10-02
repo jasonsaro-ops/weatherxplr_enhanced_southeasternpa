@@ -3,6 +3,7 @@
  * Dense ops-console dashboard · NWS + Open-Meteo · single radar · tiered tones
  */
 const LAT = 40.0759, LON = -75.2996, ZIP = "19428";
+const WEATHERAPI_KEY = "41e45eed46d4eeb3da7c067ca33f7322";
 const CYCLE = 120;
 
 const GAUGES = [
@@ -304,6 +305,25 @@ async function fetchAlerts() {
         if (id && !seen.has(id)) { seen.add(id); feats.push(f); }
       });
     });
+    // WeatherAPI.com government alerts (non-NWS aggregator) for SE-PA point + region
+    let wapiAlerts = [];
+    let wapiStatus = null;
+    try {
+      const wq = encodeURIComponent(`${LAT},${LON}`);
+      const wurl = `https://api.weatherapi.com/v1/forecast.json?key=${WEATHERAPI_KEY}&q=${wq}&days=1&alerts=yes&aqi=no`;
+      const wdata = await fetch(wurl).then(r => r.json());
+      if (wdata.error) {
+        wapiStatus = wdata.error.message || "WeatherAPI error";
+        console.warn("WeatherAPI:", wdata.error);
+      } else {
+        wapiAlerts = (wdata.alerts && wdata.alerts.alert) || [];
+        wapiStatus = "ok";
+      }
+    } catch (e) {
+      wapiStatus = "unreachable";
+      console.warn("WeatherAPI fetch failed", e);
+    }
+
     // Supplemental: SPC Day-1 categorical outlook as non-NWS product row (when risk exists)
     let spcNote = null;
     try {
@@ -328,6 +348,42 @@ async function fetchAlerts() {
         <div class="rv" style="font-size:11px;color:var(--amber)">SPC ↗</div>
       </div>`;
     }
+    // WeatherAPI alerts (dedupe loosely against NWS by event+areas)
+    const nwsEventKeys = new Set(feats.map(f => {
+      const p = f.properties || {};
+      return ((p.event || "") + "|" + (p.areaDesc || "").slice(0, 40)).toLowerCase();
+    }));
+    wapiAlerts.forEach((a, i) => {
+      const key = ((a.event || a.headline || "") + "|" + (a.areas || "").slice(0, 40)).toLowerCase();
+      if (nwsEventKeys.has(key)) return;
+      const sev = (a.severity || "Unknown").toLowerCase();
+      const sk = sev.includes("extreme") ? "extreme" : sev.includes("severe") ? "severe" : sev.includes("moderate") ? "moderate" : sev.includes("minor") ? "minor" : "unknown";
+      const id = "wapi-" + i;
+      alertCache[id] = {
+        id, event: a.event || a.headline || "WeatherAPI Alert",
+        severity: a.severity || "Unknown",
+        urgency: a.urgency || "",
+        certainty: a.certainty || "",
+        areaDesc: a.areas || "",
+        headline: a.headline || a.event || "",
+        description: a.desc || a.note || "",
+        instruction: a.instruction || "",
+        senderName: "WeatherAPI · " + (a.category || "Gov"),
+        _source: "weatherapi"
+      };
+      // Count toward new-alert tones
+      if (hasBaseline && !prevAlertIds.has(id)) {
+        /* WeatherAPI ids change; skip tone spam on source-only dupes */
+      }
+      const col = sk === "extreme" || sk === "severe" ? "var(--err)" : "var(--warn)";
+      html += `<div class="alert-card ${sevClass(sk)}" onclick="openAlert('${id}')">
+        <div class="alert-ev" style="color:${col}">${a.event || a.headline || "Alert"}</div>
+        <div class="alert-meta">${a.severity || "—"} · WeatherAPI · ${(a.areas || "").substring(0, 55)}${(a.areas || "").length > 55 ? "…" : ""}</div>
+      </div>`;
+    });
+    if (wapiStatus && wapiStatus !== "ok" && !wapiAlerts.length) {
+      html += `<div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono);margin:4px 0">WeatherAPI: ${wapiStatus}</div>`;
+    }
     if (!feats.length) {
       html += `<div class="empty"><i class="fa-solid fa-check"></i> Clear — no active NWS alerts (PA / NJ / DE)</div>`;
     } else {
@@ -351,10 +407,11 @@ async function fetchAlerts() {
     prevAlertIds = ids;
 
     $("panel-alerts").innerHTML = html;
-    $("alert-tag").textContent = feats.length ? feats.length + " ACTIVE · PA/NJ/DE" : (spcNote ? "SPC" : "CLEAR");
+    const totalAlerts = feats.length + (typeof wapiAlerts !== "undefined" ? wapiAlerts.length : 0);
+    $("alert-tag").textContent = totalAlerts ? totalAlerts + " ACTIVE · MULTI" : (spcNote ? "SPC" : "CLEAR");
     const chip = $("chip-alerts");
-    chip.textContent = "ALERTS " + feats.length;
-    chip.classList.toggle("alert", feats.length > 0);
+    chip.textContent = "ALERTS " + totalAlerts;
+    chip.classList.toggle("alert", totalAlerts > 0);
 
     const wrap = $("panel-alerts-wrap");
     if (wrap) {
