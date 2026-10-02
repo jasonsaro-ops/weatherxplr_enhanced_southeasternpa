@@ -289,8 +289,30 @@ window.openNwsPeriod = function (i) {
 /* ── Alerts ── */
 async function fetchAlerts() {
   try {
-    const data = await fetch("https://api.weather.gov/alerts/active?area=PA").then(r => r.json());
-    const feats = data.features || [];
+    // Statewide PA + adjacent NJ/DE (SE-PA regional) — not limited to PHI/Mount Holly
+    const urls = [
+      "https://api.weather.gov/alerts/active?area=PA",
+      "https://api.weather.gov/alerts/active?area=NJ",
+      "https://api.weather.gov/alerts/active?area=DE"
+    ];
+    const results = await Promise.all(urls.map(u => fetch(u).then(r => r.json()).catch(() => ({ features: [] }))));
+    const seen = new Set();
+    const feats = [];
+    results.forEach(data => {
+      (data.features || []).forEach(f => {
+        const id = f.properties && f.properties.id;
+        if (id && !seen.has(id)) { seen.add(id); feats.push(f); }
+      });
+    });
+    // Supplemental: SPC Day-1 categorical outlook as non-NWS product row (when risk exists)
+    let spcNote = null;
+    try {
+      const spc = await fetch("https://www.spc.noaa.gov/products/outlook/day1otlk_cat.nolyr.geojson").then(r => r.json());
+      const labels = (spc.features || []).map(f => (f.properties && (f.properties.LABEL || f.properties.label)) || "").filter(Boolean);
+      const uniq = [...new Set(labels)];
+      if (uniq.length) spcNote = "SPC Day-1: " + uniq.join(", ");
+    } catch (e) { /* optional */ }
+
     alertCache = {};
     const ids = new Set();
     const newSevs = new Set();
@@ -300,8 +322,14 @@ async function fetchAlerts() {
     });
     let html = "";
     let worst = null;
+    if (spcNote) {
+      html += `<div class="row-item" style="border-left:3px solid var(--warn);margin-bottom:6px" onclick="window.open('https://www.spc.noaa.gov/products/outlook/day1otlk.html','_blank')">
+        <div><div class="nm" style="color:var(--warn)">SPC Convective Outlook</div><div class="sub">${spcNote}</div></div>
+        <div class="rv" style="font-size:11px;color:var(--amber)">SPC ↗</div>
+      </div>`;
+    }
     if (!feats.length) {
-      html = `<div class="empty"><i class="fa-solid fa-check"></i> Clear — no active PA alerts</div>`;
+      html += `<div class="empty"><i class="fa-solid fa-check"></i> Clear — no active NWS alerts (PA / NJ / DE)</div>`;
     } else {
       feats.forEach(f => {
         const p = f.properties;
@@ -311,9 +339,10 @@ async function fetchAlerts() {
         if (hasBaseline && !prevAlertIds.has(p.id)) newSevs.add(sk);
         if (!worst || ({ extreme: 0, severe: 1, moderate: 2, minor: 3 }[sk] ?? 4) < ({ extreme: 0, severe: 1, moderate: 2, minor: 3 }[worst] ?? 4)) worst = sk;
         const col = sk === "extreme" || sk === "severe" ? "var(--err)" : "var(--warn)";
+        const sender = (p.senderName || p.sender || "").replace("NWS ", "");
         html += `<div class="alert-card ${sevClass(p.severity)}" onclick="openAlert('${p.id}')">
           <div class="alert-ev" style="color:${col}">${p.event}</div>
-          <div class="alert-meta">${p.severity || "—"} · ${(p.areaDesc || "").substring(0, 70)}${(p.areaDesc || "").length > 70 ? "…" : ""}</div>
+          <div class="alert-meta">${p.severity || "—"} · ${sender ? sender + " · " : ""}${(p.areaDesc || "").substring(0, 60)}${(p.areaDesc || "").length > 60 ? "…" : ""}</div>
         </div>`;
       });
     }
@@ -322,13 +351,15 @@ async function fetchAlerts() {
     prevAlertIds = ids;
 
     $("panel-alerts").innerHTML = html;
-    $("alert-tag").textContent = feats.length ? feats.length + " ACTIVE" : "CLEAR";
+    $("alert-tag").textContent = feats.length ? feats.length + " ACTIVE · PA/NJ/DE" : (spcNote ? "SPC" : "CLEAR");
     const chip = $("chip-alerts");
     chip.textContent = "ALERTS " + feats.length;
     chip.classList.toggle("alert", feats.length > 0);
 
     const wrap = $("panel-alerts-wrap");
-    wrap.className = "panel" + (worst ? " " + sevClass(worst) : "");
+    if (wrap) {
+      wrap.className = "panel grow" + (worst ? " " + sevClass(worst) : "");
+    }
     setFeed("nws", true);
   } catch (e) {
     setFeed("nws", false);
@@ -418,20 +449,19 @@ async function fetchAQI() {
     const rows = [
       { lab: "US AQI", val: c.us_aqi != null ? String(c.us_aqi) : "—", sub: cat.name, color: cat.color },
       { lab: "PM2.5", val: c.pm2_5 != null ? c.pm2_5.toFixed(1) : "—", sub: "μg/m³", color: cat.color },
-      { lab: "PM10", val: c.pm10 != null ? c.pm10.toFixed(1) : "—", sub: "μg/m³", color: "var(--text-hi)" },
-      { lab: "Ozone", val: c.ozone != null ? String(Math.round(c.ozone)) : "—", sub: "μg/m³", color: "var(--text-hi)" },
-      { lab: "NO₂", val: c.nitrogen_dioxide != null ? c.nitrogen_dioxide.toFixed(1) : "—", sub: "μg/m³", color: "var(--text-hi)" },
-      { lab: "SO₂", val: c.sulphur_dioxide != null ? c.sulphur_dioxide.toFixed(1) : "—", sub: "μg/m³", color: "var(--text-hi)" },
-      { lab: "CO", val: c.carbon_monoxide != null ? String(Math.round(c.carbon_monoxide)) : "—", sub: "μg/m³", color: "var(--text-hi)" }
+      { lab: "PM10", val: c.pm10 != null ? c.pm10.toFixed(1) : "—", sub: "μg/m³", color: "var(--cyan)" },
+      { lab: "Ozone", val: c.ozone != null ? String(Math.round(c.ozone)) : "—", sub: "μg/m³", color: "var(--cyan)" },
+      { lab: "NO₂", val: c.nitrogen_dioxide != null ? c.nitrogen_dioxide.toFixed(1) : "—", sub: "μg/m³", color: "var(--cyan)" },
+      { lab: "SO₂", val: c.sulphur_dioxide != null ? c.sulphur_dioxide.toFixed(1) : "—", sub: "μg/m³", color: "var(--cyan)" }
     ];
-    let html = "";
+    let html = `<div class="aqi-duo">`;
     rows.forEach((x) => {
       html += `<div class="row-item" onclick="openAQI()">
         <div><div class="nm">${x.lab}</div><div class="sub">${x.sub}</div></div>
         <div class="rv" style="color:${x.color}">${x.val}</div>
       </div>`;
     });
-    html += `<div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono);margin-top:2px">${c.time || "—"} · Open-Meteo AQ</div>`;
+    html += `</div>`;
     $("panel-aqi").innerHTML = html;
   } catch (e) {
     setFeed("aqi", false);
@@ -489,11 +519,12 @@ async function fetchTides() {
     setFeed("tides", true);
     const last = wl.data && wl.data[wl.data.length - 1];
     const la = air.data && air.data[air.data.length - 1];
-    let html = `<div class="g2" style="margin-bottom:8px">
+    let html = `<div class="g2" style="margin-bottom:6px">
       <div class="metric"><div class="lab">MLLW</div><div class="val">${last ? last.v + " ft" : "—"}</div></div>
       <div class="metric"><div class="lab">Air</div><div class="val">${la ? la.v + "°F" : "—"}</div></div>
     </div>
-    <div style="height:100px;position:relative;min-height:80px"><canvas id="tide-chart"></canvas></div>`;
+    <div style="height:110px;position:relative;flex-shrink:0"><canvas id="tide-chart"></canvas></div>
+    <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono);margin-top:4px">Station 8545240 · click chart legend · NOAA</div>`;
     $("panel-tides").innerHTML = html;
 
     const labels = (wl.data || []).map(d => d.t.split(" ")[1].slice(0, 5));

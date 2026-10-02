@@ -130,6 +130,11 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 .kphl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 .kphl-grid .metric{padding:4px 6px}
 .kphl-grid .val{font-size:12px}
+.aqi-duo{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.aqi-duo .row-item{margin-bottom:0;padding:5px 7px}
+.aqi-duo .nm{font-size:11px}
+.aqi-duo .sub{font-size:9px}
+.aqi-duo .rv{font-size:13px}
 
 /* FOOTER */
 .foot{grid-area:foot;height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;
@@ -198,10 +203,10 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
         <div class="panel-bd" id="panel-conditions">Loading…</div>
       </section>
       <section class="panel grow" id="panel-alerts-wrap">
-        <div class="panel-hd">Active Alerts · PA <span class="tag" id="alert-tag">—</span></div>
+        <div class="panel-hd">Active Alerts · PA / NJ / DE <span class="tag" id="alert-tag">—</span></div>
         <div class="panel-bd" id="panel-alerts">Scanning NWS…</div>
       </section>
-      <section class="panel compact">
+      <section class="panel compact" style="margin-top:auto">
         <div class="panel-hd">Surface Obs <span class="tag">NWS</span></div>
         <div class="panel-bd" id="panel-obs">Stations…</div>
       </section>
@@ -224,7 +229,7 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 
     <!-- RIGHT -->
     <div class="col col-right">
-      <section class="panel compact" style="max-height:32vh">
+      <section class="panel compact" style="max-height:22vh">
         <div class="panel-hd">Air Quality <span class="tag">OPEN-METEO AQ</span></div>
         <div class="panel-bd" id="panel-aqi">AQI…</div>
       </section>
@@ -232,11 +237,11 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
         <div class="panel-hd">KPHL Airport <span class="tag">NWS · CLICK</span></div>
         <div class="panel-bd" id="panel-kphl">Loading KPHL…</div>
       </section>
-      <section class="panel compact" style="max-height:28vh">
+      <section class="panel compact" style="max-height:22vh">
         <div class="panel-hd">Hydrology <span class="tag">USGS SCHUYLKILL</span></div>
         <div class="panel-bd" id="panel-hydro">Gauges…</div>
       </section>
-      <section class="panel grow" style="min-height:160px;flex:1 1 160px">
+      <section class="panel grow" style="min-height:180px;flex:1 1 180px">
         <div class="panel-hd">Tides · 8545240 <span class="tag">NOAA</span></div>
         <div class="panel-bd" id="panel-tides">Tides…</div>
       </section>
