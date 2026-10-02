@@ -474,21 +474,73 @@ window.openSPC = function () {
   } else {
     rows = `<div class="empty" style="margin:8px 0">No categorical risk polygons in the current Day-1 outlook geometry.</div>`;
   }
+
+  // SPC now publishes cycle PNGs (UTC): 1200, 1300, 1630, 2000, 0100 — old *_sm.gif is gone
+  const cycles = ["0100", "2000", "1630", "1300", "1200"];
+  const utcH = new Date().getUTCHours() * 100 + new Date().getUTCMinutes();
+  // Prefer most recent cycle at or before current UTC time
+  const order = [];
+  const ranked = [
+    { c: "0100", t: 100 },
+    { c: "2000", t: 2000 },
+    { c: "1630", t: 1630 },
+    { c: "1300", t: 1300 },
+    { c: "1200", t: 1200 }
+  ];
+  const past = ranked.filter(x => x.t <= utcH).sort((a, b) => b.t - a.t);
+  const future = ranked.filter(x => x.t > utcH).sort((a, b) => b.t - a.t);
+  [...past, ...future].forEach(x => order.push(x.c));
+
+  const urls = order.map(c => `https://www.spc.noaa.gov/products/outlook/day1otlk_${c}.png`);
+  window.__spcImgUrls = urls;
+
   const body = `
     <div style="color:var(--warn);font-weight:700;margin-bottom:8px">${note}</div>
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Storm Prediction Center · Day-1 categorical convective outlook</div>
     ${rows}
     <div style="margin:14px 0 8px;font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Outlook graphic</div>
     <div style="background:var(--raise);border:1px solid var(--line);border-radius:2px;padding:8px;text-align:center">
-      <img src="https://www.spc.noaa.gov/products/outlook/day1otlk_sm.gif" alt="SPC Day-1 Outlook"
-        style="max-width:100%;height:auto;border-radius:2px"
-        onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-      <div style="display:none;color:var(--text-dim);font-size:12px">Graphic unavailable</div>
+      <img id="spc-outlook-img" alt="SPC Day-1 Outlook"
+        style="max-width:100%;height:auto;border-radius:2px;display:block;margin:0 auto"
+        src="${urls[0]}"
+        data-idx="0"
+        onerror="window.__spcImgFallback && window.__spcImgFallback(this)">
+      <div id="spc-img-fail" style="display:none;color:var(--text-dim);font-size:12px;padding:12px">Graphic unavailable for current cycles</div>
     </div>
+    <div style="margin-top:8px;font-size:10px;color:var(--text-dim);font-family:var(--font-mono)" id="spc-cycle-lbl">Loading cycle…</div>
     <div style="margin-top:14px;font-size:12px;color:var(--text-dim)">Full discussion and probabilistic maps remain on the SPC site if you need deeper product text.</div>
     <button class="btn-link" style="margin-top:10px;text-align:center;padding:8px"
       onclick="window.open('https://www.spc.noaa.gov/products/outlook/day1otlk.html','_blank')">Open full SPC product page ↗</button>`;
   openModal("SPC Day-1 Convective Outlook", body, "moderate");
+  // Set cycle label once image loads
+  setTimeout(() => {
+    const img = document.getElementById("spc-outlook-img");
+    const lbl = document.getElementById("spc-cycle-lbl");
+    if (img && lbl && img.complete && img.naturalWidth) {
+      const m = (img.src || "").match(/day1otlk_(\d+)\.png/);
+      if (m) lbl.textContent = "Cycle " + m[1] + " UTC · SPC";
+    }
+  }, 400);
+};
+
+window.__spcImgFallback = function (img) {
+  const urls = window.__spcImgUrls || [];
+  let idx = parseInt(img.getAttribute("data-idx") || "0", 10) + 1;
+  if (idx < urls.length) {
+    img.setAttribute("data-idx", String(idx));
+    img.src = urls[idx];
+    const lbl = document.getElementById("spc-cycle-lbl");
+    if (lbl) {
+      const m = urls[idx].match(/day1otlk_(\d+)\.png/);
+      if (m) lbl.textContent = "Trying cycle " + m[1] + " UTC…";
+    }
+  } else {
+    img.style.display = "none";
+    const fail = document.getElementById("spc-img-fail");
+    if (fail) fail.style.display = "block";
+    const lbl = document.getElementById("spc-cycle-lbl");
+    if (lbl) lbl.textContent = "";
+  }
 };
 
 window.openAlert = function (id) {
