@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WEATHERXPLR · SE-PA Mission Display</title>
+<meta name="description" content="Mission-critical weather display for Southeastern Pennsylvania — NWS + Open-Meteo real-time feeds." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<style>
+:root{
+  --void:#060a10; --panel:#0b121a; --raise:#101a24; --line:#1c2836; --line-soft:#141e2a;
+  --text-hi:#dbe8f2; --text-mid:#8ea1b3; --text-dim:#4f6478;
+  --amber:#ffb020; --amber-dim:#6b4d16;
+  --cyan:#2ec4b6; --blue:#2f8fff; --green:#35d07f; --warn:#ff9f43; --err:#ff5252;
+  --sev-extreme:#ff3030; --sev-severe:#ff5252; --sev-moderate:#ff9f43; --sev-minor:#f5c142; --sev-unknown:#6b7a8a;
+  --font-display:'Rajdhani',sans-serif; --font-mono:'JetBrains Mono',monospace; --font-body:'Inter',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--void);color:var(--text-hi);font-family:var(--font-body);overflow:hidden;font-size:13px}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--panel)}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+#app{position:relative;z-index:1;height:100vh;display:grid;grid-template-rows:auto 1fr auto;grid-template-areas:"hdr" "main" "foot"}
+
+/* HEADER */
+.hdr{grid-area:hdr;display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:42px;
+  background:linear-gradient(180deg,var(--raise),var(--panel));border-bottom:1px solid var(--line);gap:12px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+.brand-title{font-family:var(--font-display);font-weight:700;font-size:18px;letter-spacing:1.5px;color:var(--amber);text-transform:uppercase}
+.brand-sub{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:.5px}
+.hdr-mid{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--line);background:var(--raise);
+  font-family:var(--font-mono);font-size:11px;color:var(--text-mid);border-radius:2px;cursor:default;user-select:none;white-space:nowrap}
+.chip.live{border-color:var(--green);color:var(--green)}
+.chip.alert{border-color:var(--err);color:var(--err);background:rgba(255,82,82,.08)}
+.chip.btn{cursor:pointer}
+.chip.btn:hover{border-color:var(--amber);color:var(--amber)}
+.chip.audio-on{border-color:var(--green);color:var(--green)}
+.clock{font-family:var(--font-mono);font-size:13px;color:var(--amber);letter-spacing:.5px;font-variant-numeric:tabular-nums}
+
+/* MAIN GRID */
+.main{grid-area:main;display:grid;grid-template-columns:minmax(280px,1.05fr) minmax(360px,1.6fr) minmax(280px,1.05fr);
+  grid-template-rows:1fr;gap:8px;padding:8px;min-height:0;overflow:hidden}
+.col{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:hidden}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:3px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.panel.sev-extreme{border-color:var(--sev-extreme);box-shadow:inset 3px 0 0 var(--sev-extreme)}
+.panel.sev-severe{border-color:var(--sev-severe);box-shadow:inset 3px 0 0 var(--sev-severe)}
+.panel.sev-moderate{border-color:var(--sev-moderate);box-shadow:inset 3px 0 0 var(--sev-moderate)}
+.panel.sev-minor{border-color:var(--sev-minor);box-shadow:inset 3px 0 0 var(--sev-minor)}
+.panel-hd{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:1px solid var(--line-soft);
+  font-family:var(--font-display);font-weight:600;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--text-mid);flex-shrink:0}
+.panel-hd .tag{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);font-weight:500;letter-spacing:.3px}
+.panel-bd{padding:8px 10px;overflow-y:auto;flex:1;min-height:0}
+
+/* Current conditions hero */
+.cond-hero{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;margin-bottom:10px}
+.cond-temp{font-family:var(--font-display);font-size:48px;font-weight:700;line-height:1;color:var(--text-hi)}
+.cond-unit{font-size:18px;color:var(--text-mid)}
+.cond-desc{font-size:14px;color:var(--text-mid);margin-top:2px}
+.cond-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.metric{background:var(--raise);border:1px solid var(--line-soft);padding:6px 8px;border-radius:2px}
+.metric .lab{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;font-family:var(--font-mono)}
+.metric .val{font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--cyan);margin-top:2px}
+
+/* Alerts */
+.alert-card{border-left:3px solid var(--sev-unknown);background:var(--raise);padding:8px 10px;margin-bottom:6px;
+  border-radius:0 2px 2px 0;cursor:pointer;transition:filter .12s}
+.alert-card:hover{filter:brightness(1.12)}
+.alert-card.sev-extreme{border-left-color:var(--sev-extreme);background:#2a1010}
+.alert-card.sev-severe{border-left-color:var(--sev-severe);background:#241212}
+.alert-card.sev-moderate{border-left-color:var(--sev-moderate);background:#241a0e}
+.alert-card.sev-minor{border-left-color:var(--sev-minor);background:#1e1a0c}
+.alert-ev{font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.3px}
+.alert-meta{font-size:11px;color:var(--text-dim);margin-top:2px;line-height:1.35}
+
+/* Forecast strip */
+.fc-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.fc-day{flex:0 0 72px;background:var(--raise);border:1px solid var(--line-soft);padding:6px 4px;text-align:center;
+  border-radius:2px;cursor:pointer;transition:border-color .12s}
+.fc-day:hover{border-color:var(--amber)}
+.fc-day .d{font-size:10px;color:var(--text-dim);font-family:var(--font-mono);text-transform:uppercase}
+.fc-day .t{font-family:var(--font-mono);font-weight:600;font-size:14px;margin:3px 0}
+.fc-day .hi{color:var(--warn)} .fc-day .lo{color:var(--blue)}
+.fc-day img{width:28px;height:28px}
+
+.hr-row{display:flex;gap:4px;overflow-x:auto}
+.hr-cell{flex:0 0 54px;text-align:center;background:var(--raise);border:1px solid var(--line-soft);padding:5px 2px;border-radius:2px}
+.hr-cell .h{font-size:10px;color:var(--text-dim);font-family:var(--font-mono)}
+.hr-cell .t{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-hi)}
+.hr-cell .p{font-size:10px;color:var(--blue)}
+
+/* Obs / lists */
+.row-item{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--raise);
+  border:1px solid var(--line-soft);margin-bottom:4px;border-radius:2px;cursor:pointer;gap:8px}
+.row-item:hover{border-color:var(--amber)}
+.row-item .nm{font-weight:600;font-size:12px}
+.row-item .sub{font-size:10px;color:var(--text-dim)}
+.row-item .rv{font-family:var(--font-mono);font-weight:600;font-size:14px;color:var(--cyan)}
+
+/* Radar */
+.radar-wrap{position:relative;flex:1;min-height:0;background:#05080c}
+.radar-wrap iframe{width:100%;height:100%;border:none}
+.layer-sel{position:absolute;top:8px;left:8px;z-index:5;background:rgba(11,18,26,.94);color:var(--amber);
+  border:1px solid var(--amber-dim);padding:4px 8px;font-family:var(--font-mono);font-size:11px;border-radius:2px;cursor:pointer;max-width:160px}
+
+/* Hydro / AQI small grids */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.aqi-cell{background:var(--raise);border:1px solid var(--line-soft);padding:8px;text-align:center;border-radius:2px;cursor:pointer}
+.aqi-cell:hover{border-color:var(--amber)}
+.aqi-n{font-family:var(--font-mono);font-size:22px;font-weight:700}
+.aqi-l{font-size:10px;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+
+.btn-link{background:transparent;border:1px solid var(--line);color:var(--cyan);padding:4px 8px;font-family:var(--font-mono);
+  font-size:11px;cursor:pointer;border-radius:2px;width:100%;text-align:left;margin-top:4px}
+.btn-link:hover{border-color:var(--cyan);background:rgba(46,196,182,.06)}
+
+/* FOOTER */
+.foot{grid-area:foot;height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;
+  border-top:1px solid var(--line);background:var(--panel);font-family:var(--font-mono);font-size:10px;color:var(--text-dim)}
+.feeds{display:flex;gap:12px}
+.fd{display:inline-flex;align-items:center;gap:4px}
+.fd .d{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.fd .d.off{background:var(--err)}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(4,8,12,.88);backdrop-filter:blur(4px);z-index:9000;
+  justify-content:center;align-items:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:4px;width:min(720px,96vw);max-height:86vh;
+  display:flex;flex-direction:column;overflow:hidden;box-shadow:0 12px 48px rgba(0,0,0,.5)}
+.modal.sev-extreme{border-color:var(--sev-extreme);box-shadow:0 0 0 1px var(--sev-extreme),0 12px 48px rgba(0,0,0,.5)}
+.modal.sev-severe{border-color:var(--sev-severe)}
+.modal.sev-moderate{border-color:var(--sev-moderate)}
+.modal.sev-minor{border-color:var(--sev-minor)}
+.modal-hd{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);
+  font-family:var(--font-display);font-weight:700;font-size:15px;letter-spacing:1px;text-transform:uppercase;color:var(--amber)}
+.modal-x{cursor:pointer;color:var(--text-dim);font-size:16px;padding:4px 8px}
+.modal-x:hover{color:var(--err)}
+.modal-bd{padding:16px;overflow-y:auto;font-size:13px;line-height:1.55;color:var(--text-hi)}
+
+.empty{color:var(--green);font-size:12px;padding:6px 0}
+.err{color:var(--err);font-size:12px}
+
+@media (max-width:1100px){
+  .main{grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr}
+  .col-center{grid-column:1/-1;min-height:320px}
+}
+@media (max-width:720px){
+  .main{grid-template-columns:1fr;overflow-y:auto}
+  .col{min-height:240px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="hdr">
+    <div class="brand">
+      <div class="brand-mark" id="live-dot"></div>
+      <div>
+        <div class="brand-title">WEATHERXPLR</div>
+        <div class="brand-sub">SE-PA · PHI CWA · 19428</div>
+      </div>
+    </div>
+    <div class="hdr-mid">
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="chip live" id="chip-status">ONLINE</div>
+      <div class="chip" id="chip-alerts">ALERTS 0</div>
+      <div class="chip btn audio-off" id="btn-audio" title="Tiered alert tones"><i class="fa-solid fa-volume-xmark" id="audio-ico"></i> <span id="audio-lbl">TONES OFF</span></div>
+    </div>
+    <div class="hdr-mid">
+      <div class="chip">CYCLE <b id="cd" style="color:var(--text-hi)">120</b>s</div>
+      <div class="chip" id="chip-sync">SYNC --</div>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- LEFT -->
+    <div class="col col-left">
+      <section class="panel" style="flex:0 0 auto;max-height:42%">
+        <div class="panel-hd">Conditions <span class="tag" id="cond-src">OPEN-METEO · NWS</span></div>
+        <div class="panel-bd" id="panel-conditions">Loading…</div>
+      </section>
+      <section class="panel" id="panel-alerts-wrap" style="flex:1">
+        <div class="panel-hd">Active Alerts · PA <span class="tag" id="alert-tag">—</span></div>
+        <div class="panel-bd" id="panel-alerts">Scanning NWS…</div>
+      </section>
+      <section class="panel" style="flex:0 0 auto;max-height:28%">
+        <div class="panel-hd">Surface Obs <span class="tag">NWS</span></div>
+        <div class="panel-bd" id="panel-obs">Stations…</div>
+      </section>
+    </div>
+
+    <!-- CENTER -->
+    <div class="col col-center">
+      <section class="panel" style="flex:1;display:flex;flex-direction:column">
+        <div class="panel-hd">Radar / Model Array <span class="tag">WINDY · LIVE</span></div>
+        <div class="radar-wrap">
+          <select class="layer-sel" id="layer-sel"></select>
+          <iframe id="radar-frame" title="Radar"></iframe>
+        </div>
+      </section>
+      <section class="panel" style="flex:0 0 auto;max-height:36%">
+        <div class="panel-hd">7-Day · Hourly <span class="tag">NWS · OPEN-METEO</span></div>
+        <div class="panel-bd" id="panel-forecast">Forecast…</div>
+      </section>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="col col-right">
+      <section class="panel" style="flex:0 0 auto">
+        <div class="panel-hd">Air Quality <span class="tag">AIRNOW 19428</span></div>
+        <div class="panel-bd" id="panel-aqi">AQI…</div>
+      </section>
+      <section class="panel" style="flex:0 0 auto">
+        <div class="panel-hd">Hydrology <span class="tag">USGS SCHUYLKILL</span></div>
+        <div class="panel-bd" id="panel-hydro">Gauges…</div>
+      </section>
+      <section class="panel" style="flex:1;min-height:140px">
+        <div class="panel-hd">Tides · 8545240 <span class="tag">NOAA</span></div>
+        <div class="panel-bd" id="panel-tides">Tides…</div>
+      </section>
+      <section class="panel" style="flex:0 0 auto;max-height:22%">
+        <div class="panel-hd">PHI Discussion <span class="tag">NWS AFD</span></div>
+        <div class="panel-bd" id="panel-afd" style="font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;cursor:pointer">AFD…</div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <div class="feeds">
+      <span class="fd"><span class="d" id="d-nws"></span>NWS</span>
+      <span class="fd"><span class="d" id="d-om"></span>OPEN-METEO</span>
+      <span class="fd"><span class="d" id="d-aqi"></span>AIRNOW</span>
+      <span class="fd"><span class="d" id="d-hydro"></span>USGS</span>
+      <span class="fd"><span class="d" id="d-tides"></span>TIDES</span>
+    </div>
+    <div>40.0759°N 75.2996°W · Montgomery / SE PA</div>
+    <div>WEATHERXPLR · MISSION DISPLAY · 120s CYCLE</div>
+  </footer>
+</div>
+
+<div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal">
+    <div class="modal-hd"><span id="modal-title">Detail</span><span class="modal-x" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></span></div>
+    <div class="modal-bd" id="modal-body"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
