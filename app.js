@@ -3,7 +3,7 @@
  * Dense ops-console dashboard · NWS + Open-Meteo · single radar · tiered tones
  */
 const LAT = 40.0759, LON = -75.2996, ZIP = "19428";
-const WEATHERAPI_KEY = "41e45eed46d4eeb3da7c067ca33f7322";
+const OWM_KEY = "591facdee3ec07d8e79519288c97d2a1"; // OpenWeatherMap free (activates ~2h after signup)
 const CYCLE = 120;
 
 const GAUGES = [
@@ -305,23 +305,48 @@ async function fetchAlerts() {
         if (id && !seen.has(id)) { seen.add(id); feats.push(f); }
       });
     });
-    // WeatherAPI.com government alerts (non-NWS aggregator) for SE-PA point + region
-    let wapiAlerts = [];
+    // OpenWeatherMap (api.openweathermap.org) — free current weather + optional One Call alerts
+    // NOTE: Free plan does NOT include a government-alert feed like NWS CAP.
+    // One Call 3.0 alerts require a separate paid subscription; we still try gracefully.
+    let wapiAlerts = []; // reused name = "secondary source alerts"
     let wapiStatus = null;
     try {
-      const wq = encodeURIComponent(`${LAT},${LON}`);
-      const wurl = `https://api.weatherapi.com/v1/forecast.json?key=${WEATHERAPI_KEY}&q=${wq}&days=1&alerts=yes&aqi=no`;
-      const wdata = await fetch(wurl).then(r => r.json());
-      if (wdata.error) {
-        wapiStatus = wdata.error.message || "WeatherAPI error";
-        console.warn("WeatherAPI:", wdata.error);
+      const cur = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${LAT}&lon=${LON}&units=imperial&appid=${OWM_KEY}`
+      ).then(r => r.json());
+      if (cur.cod && Number(cur.cod) !== 200) {
+        wapiStatus = cur.message || ("OWM " + cur.cod);
+        console.warn("OpenWeatherMap:", cur);
       } else {
-        wapiAlerts = (wdata.alerts && wdata.alerts.alert) || [];
         wapiStatus = "ok";
+        // Stash current for optional UI (conditions already from Open-Meteo)
+        window.__owmCurrent = cur;
       }
+      // Try One Call 3.0 for alerts (may fail on free plan — expected)
+      try {
+        const oc = await fetch(
+          `https://api.openweathermap.org/data/3.0/onecall?lat=${LAT}&lon=${LON}&units=imperial&appid=${OWM_KEY}`
+        ).then(r => r.json());
+        if (oc.alerts && oc.alerts.length) {
+          wapiAlerts = oc.alerts.map(a => ({
+            event: a.event,
+            headline: a.event,
+            severity: "Unknown",
+            urgency: "",
+            certainty: "",
+            areas: (a.tags || []).join(", ") || "Regional",
+            desc: a.description || "",
+            instruction: "",
+            category: "OpenWeatherMap",
+            sender_name: a.sender_name || "OWM"
+          }));
+        } else if (oc.cod || oc.message) {
+          // no alerts or no access — fine
+        }
+      } catch (e2) { /* optional */ }
     } catch (e) {
       wapiStatus = "unreachable";
-      console.warn("WeatherAPI fetch failed", e);
+      console.warn("OpenWeatherMap fetch failed", e);
     }
 
     // Supplemental: SPC Day-1 categorical outlook as non-NWS product row (when risk exists)
@@ -368,7 +393,7 @@ async function fetchAlerts() {
         headline: a.headline || a.event || "",
         description: a.desc || a.note || "",
         instruction: a.instruction || "",
-        senderName: "WeatherAPI · " + (a.category || "Gov"),
+        senderName: "OpenWeather · " + (a.category || "Gov"),
         _source: "weatherapi"
       };
       // Count toward new-alert tones
@@ -378,11 +403,11 @@ async function fetchAlerts() {
       const col = sk === "extreme" || sk === "severe" ? "var(--err)" : "var(--warn)";
       html += `<div class="alert-card ${sevClass(sk)}" onclick="openAlert('${id}')">
         <div class="alert-ev" style="color:${col}">${a.event || a.headline || "Alert"}</div>
-        <div class="alert-meta">${a.severity || "—"} · WeatherAPI · ${(a.areas || "").substring(0, 55)}${(a.areas || "").length > 55 ? "…" : ""}</div>
+        <div class="alert-meta">${a.severity || "—"} · OpenWeather · ${(a.areas || "").substring(0, 55)}${(a.areas || "").length > 55 ? "…" : ""}</div>
       </div>`;
     });
     if (wapiStatus && wapiStatus !== "ok" && !wapiAlerts.length) {
-      html += `<div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono);margin:4px 0">WeatherAPI: ${wapiStatus}</div>`;
+      html += `<div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono);margin:4px 0">OpenWeather: ${wapiStatus}</div>`;
     }
     if (!feats.length) {
       html += `<div class="empty"><i class="fa-solid fa-check"></i> Clear — no active NWS alerts (PA / NJ / DE)</div>`;
