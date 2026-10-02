@@ -349,13 +349,24 @@ async function fetchAlerts() {
       console.warn("OpenWeatherMap fetch failed", e);
     }
 
-    // Supplemental: SPC Day-1 categorical outlook as non-NWS product row (when risk exists)
+    // Supplemental: SPC Day-1 categorical outlook (opens in-app modal)
     let spcNote = null;
+    let spcDetail = null;
     try {
       const spc = await fetch("https://www.spc.noaa.gov/products/outlook/day1otlk_cat.nolyr.geojson").then(r => r.json());
       const labels = (spc.features || []).map(f => (f.properties && (f.properties.LABEL || f.properties.label)) || "").filter(Boolean);
       const uniq = [...new Set(labels)];
-      if (uniq.length) spcNote = "SPC Day-1: " + uniq.join(", ");
+      const counts = {};
+      labels.forEach(l => { counts[l] = (counts[l] || 0) + 1; });
+      if (uniq.length) {
+        spcNote = "SPC Day-1: " + uniq.join(", ");
+        spcDetail = { labels: uniq, counts, featureCount: (spc.features || []).length };
+      } else {
+        spcNote = "SPC Day-1: no categorical risk areas";
+        spcDetail = { labels: [], counts: {}, featureCount: 0 };
+      }
+      window.__spcDetail = spcDetail;
+      window.__spcNote = spcNote;
     } catch (e) { /* optional */ }
 
     alertCache = {};
@@ -368,9 +379,9 @@ async function fetchAlerts() {
     let html = "";
     let worst = null;
     if (spcNote) {
-      html += `<div class="row-item" style="border-left:3px solid var(--warn);margin-bottom:6px" onclick="window.open('https://www.spc.noaa.gov/products/outlook/day1otlk.html','_blank')">
+      html += `<div class="row-item" style="border-left:3px solid var(--warn);margin-bottom:6px;cursor:pointer" onclick="openSPC()">
         <div><div class="nm" style="color:var(--warn)">SPC Convective Outlook</div><div class="sub">${spcNote}</div></div>
-        <div class="rv" style="font-size:11px;color:var(--amber)">SPC ↗</div>
+        <div class="rv" style="font-size:11px;color:var(--amber)">VIEW</div>
       </div>`;
     }
     // WeatherAPI alerts (dedupe loosely against NWS by event+areas)
@@ -448,6 +459,38 @@ async function fetchAlerts() {
     $("panel-alerts").innerHTML = `<span class="err">Alert feed down</span>`;
   }
 }
+
+window.openSPC = function () {
+  const d = window.__spcDetail || { labels: [], counts: {}, featureCount: 0 };
+  const note = window.__spcNote || "SPC Day-1 Convective Outlook";
+  let rows = "";
+  if (d.labels && d.labels.length) {
+    d.labels.forEach(lab => {
+      rows += `<div class="meta-row" style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)">
+        <span style="color:var(--text-dim)">${lab}</span>
+        <span style="color:var(--cyan);font-family:var(--font-mono)">${d.counts[lab] || 0} region(s)</span>
+      </div>`;
+    });
+  } else {
+    rows = `<div class="empty" style="margin:8px 0">No categorical risk polygons in the current Day-1 outlook geometry.</div>`;
+  }
+  const body = `
+    <div style="color:var(--warn);font-weight:700;margin-bottom:8px">${note}</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Storm Prediction Center · Day-1 categorical convective outlook</div>
+    ${rows}
+    <div style="margin:14px 0 8px;font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Outlook graphic</div>
+    <div style="background:var(--raise);border:1px solid var(--line);border-radius:2px;padding:8px;text-align:center">
+      <img src="https://www.spc.noaa.gov/products/outlook/day1otlk_sm.gif" alt="SPC Day-1 Outlook"
+        style="max-width:100%;height:auto;border-radius:2px"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <div style="display:none;color:var(--text-dim);font-size:12px">Graphic unavailable</div>
+    </div>
+    <div style="margin-top:14px;font-size:12px;color:var(--text-dim)">Full discussion and probabilistic maps remain on the SPC site if you need deeper product text.</div>
+    <button class="btn-link" style="margin-top:10px;text-align:center;padding:8px"
+      onclick="window.open('https://www.spc.noaa.gov/products/outlook/day1otlk.html','_blank')">Open full SPC product page ↗</button>`;
+  openModal("SPC Day-1 Convective Outlook", body, "moderate");
+};
+
 window.openAlert = function (id) {
   const a = alertCache[id];
   if (!a) return;
