@@ -426,15 +426,15 @@ async function fetchAQI() {
       { lab: "EAQI", val: c.european_aqi != null ? c.european_aqi : "—", color: "#8ea1b3", sub: "EU index" }
     ];
     let html = `<div class="g2">`;
-    cells.forEach((x, i) => {
+    cells.forEach((x) => {
       html += `<div class="aqi-cell" onclick="openAQI()">
-        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase">${x.lab}</div>
+        <div class="lab">${x.lab}</div>
         <div class="aqi-n" style="color:${x.color}">${x.val}</div>
         <div class="aqi-l" style="color:${x.color}">${x.sub}</div>
       </div>`;
     });
     html += `</div>`;
-    html += `<div style="margin-top:6px;font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">${c.time || "—"} · Open-Meteo AQ (AirNow retired)</div>`;
+    html += `<div style="margin-top:6px;font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">${c.time || "—"} · Open-Meteo AQ</div>`;
     $("panel-aqi").innerHTML = html;
   } catch (e) {
     setFeed("aqi", false);
@@ -532,22 +532,111 @@ async function fetchTides() {
   }
 }
 
-/* ── AFD ── */
-async function fetchAFD() {
+/* ── KPHL Airport conditions (graphical) + AFD on demand ── */
+let kphlObs = null;
+
+async function fetchKPHL() {
+  try {
+    const obs = await fetch("https://api.weather.gov/stations/KPHL/observations/latest").then(r => r.json());
+    kphlObs = obs.properties || {};
+    const p = kphlObs;
+    const tC = p.temperature && p.temperature.value;
+    const tF = tC != null ? Math.round(tC * 9 / 5 + 32) : "—";
+    const dC = p.dewpoint && p.dewpoint.value;
+    const dF = dC != null ? Math.round(dC * 9 / 5 + 32) : "—";
+    const wind = p.windSpeed && p.windSpeed.value != null ? Math.round(p.windSpeed.value * 2.237) : "—";
+    const gust = p.windGust && p.windGust.value != null ? Math.round(p.windGust.value * 2.237) : null;
+    const dir = p.windDirection && p.windDirection.value != null ? p.windDirection.value : "—";
+    const rh = p.relativeHumidity && p.relativeHumidity.value != null ? Math.round(p.relativeHumidity.value) : "—";
+    const vis = p.visibility && p.visibility.value != null ? (p.visibility.value / 1609.34).toFixed(1) : "—";
+    const press = p.barometricPressure && p.barometricPressure.value != null ? (p.barometricPressure.value / 100).toFixed(0) : "—";
+    const desc = p.textDescription || "—";
+    const icon = p.icon || "";
+
+    $("panel-kphl").innerHTML = `
+      <div class="row-item" style="flex-direction:column;align-items:stretch;gap:8px" onclick="openKPHL()">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            ${icon ? `<img src="${icon}" alt="" style="width:40px;height:40px">` : ""}
+            <div>
+              <div class="nm" style="font-size:14px">KPHL · Philadelphia Intl</div>
+              <div class="sub">${desc}</div>
+            </div>
+          </div>
+          <div class="rv" style="font-size:28px;font-family:var(--font-display)">${tF}°</div>
+        </div>
+        <div class="g2">
+          <div class="metric"><div class="lab">Dewpoint</div><div class="val">${dF}°</div></div>
+          <div class="metric"><div class="lab">Humidity</div><div class="val">${rh}%</div></div>
+          <div class="metric"><div class="lab">Wind</div><div class="val">${wind} mph${gust != null ? " G" + gust : ""}</div></div>
+          <div class="metric"><div class="lab">Dir</div><div class="val">${dir}°</div></div>
+          <div class="metric"><div class="lab">Visibility</div><div class="val">${vis} mi</div></div>
+          <div class="metric"><div class="lab">Pressure</div><div class="val">${press} hPa</div></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">Click for full METAR · AFD · ${p.timestamp ? new Date(p.timestamp).toLocaleTimeString() : ""}</div>
+      </div>`;
+  } catch (e) {
+    $("panel-kphl").innerHTML = `<span class="err">KPHL unavailable</span>`;
+    console.error(e);
+  }
+  // Prefetch AFD text for modal
+  fetchAFDSilent();
+}
+
+async function fetchAFDSilent() {
   try {
     const list = await fetch("https://api.weather.gov/products/types/AFD/locations/PHI").then(r => r.json());
     const g = list["@graph"] || [];
-    if (!g.length) throw new Error("none");
+    if (!g.length) return;
     const prod = await fetch(g[0]["@id"] || `https://api.weather.gov/products/${g[0].id}`).then(r => r.json());
     afdFull = prod.productText || "";
-    const preview = afdFull.length > 400 ? afdFull.slice(0, 400) + "…" : afdFull;
-    const el = $("panel-afd");
-    el.textContent = preview;
-    el.onclick = () => openModal("PHI Area Forecast Discussion", `<pre style="white-space:pre-wrap;font-size:12px;font-family:var(--font-mono)">${afdFull.replace(/</g, "&lt;")}</pre>`);
-  } catch (e) {
-    $("panel-afd").textContent = "AFD temporarily unavailable";
-  }
+  } catch (e) { /* silent */ }
 }
+
+window.openKPHL = function () {
+  const p = kphlObs || {};
+  const tF = p.temperature && p.temperature.value != null ? ((p.temperature.value * 9 / 5) + 32).toFixed(1) : "—";
+  const dF = p.dewpoint && p.dewpoint.value != null ? ((p.dewpoint.value * 9 / 5) + 32).toFixed(1) : "—";
+  const wind = p.windSpeed && p.windSpeed.value != null ? (p.windSpeed.value * 2.237).toFixed(1) : "—";
+  const gust = p.windGust && p.windGust.value != null ? (p.windGust.value * 2.237).toFixed(1) : "—";
+  const vis = p.visibility && p.visibility.value != null ? (p.visibility.value / 1609.34).toFixed(1) : "—";
+  const press = p.barometricPressure && p.barometricPressure.value != null ? (p.barometricPressure.value / 100).toFixed(1) : "—";
+  const heat = p.heatIndex && p.heatIndex.value != null ? ((p.heatIndex.value * 9 / 5) + 32).toFixed(1) + "°F" : "—";
+  const chill = p.windChill && p.windChill.value != null ? ((p.windChill.value * 9 / 5) + 32).toFixed(1) + "°F" : "—";
+
+  let body = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      ${p.icon ? `<img src="${p.icon}" style="width:56px">` : ""}
+      <div>
+        <div style="font-size:28px;font-weight:700;font-family:var(--font-display)">${tF}°F</div>
+        <div style="color:var(--text-mid)">${p.textDescription || "—"}</div>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:14px">
+      <div class="metric"><div class="lab">Dewpoint</div><div class="val">${dF}°F</div></div>
+      <div class="metric"><div class="lab">Humidity</div><div class="val">${p.relativeHumidity && p.relativeHumidity.value != null ? Math.round(p.relativeHumidity.value) + "%" : "—"}</div></div>
+      <div class="metric"><div class="lab">Wind</div><div class="val">${wind} mph @ ${p.windDirection && p.windDirection.value != null ? p.windDirection.value + "°" : "—"}</div></div>
+      <div class="metric"><div class="lab">Gust</div><div class="val">${gust} mph</div></div>
+      <div class="metric"><div class="lab">Visibility</div><div class="val">${vis} mi</div></div>
+      <div class="metric"><div class="lab">Pressure</div><div class="val">${press} hPa</div></div>
+      <div class="metric"><div class="lab">Heat Index</div><div class="val">${heat}</div></div>
+      <div class="metric"><div class="lab">Wind Chill</div><div class="val">${chill}</div></div>
+    </div>
+    ${p.rawMessage ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">METAR</div><pre style="background:var(--raise);padding:10px;border:1px solid var(--line);font-size:11px;overflow:auto;font-family:var(--font-mono)">${String(p.rawMessage).replace(/</g,"&lt;")}</pre>` : ""}
+    <div style="margin-top:14px">
+      <button class="btn-link" onclick="openAFD()" style="width:100%;text-align:center;padding:8px">Open PHI Area Forecast Discussion</button>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">${p.timestamp ? new Date(p.timestamp).toLocaleString() : ""} · NWS station KPHL</div>`;
+  openModal("KPHL · Philadelphia International", body);
+};
+
+window.openAFD = function () {
+  if (!afdFull) {
+    openModal("PHI AFD", `<span class="err">Discussion not loaded yet — wait for next cycle or retry.</span>`);
+    return;
+  }
+  openModal("PHI Area Forecast Discussion", `<pre style="white-space:pre-wrap;font-size:12px;font-family:var(--font-mono)">${afdFull.replace(/</g, "&lt;")}</pre>`);
+};
 
 /* ── Cycle ── */
 async function refreshAll() {
@@ -558,7 +647,7 @@ async function refreshAll() {
     fetchObs(),
     fetchAQI(),
     fetchTides(),
-    fetchAFD()
+    fetchKPHL()
   ]);
   fetchHydro();
   $("chip-sync").textContent = "SYNC " + new Date().toLocaleTimeString("en-US", { hour12: false });

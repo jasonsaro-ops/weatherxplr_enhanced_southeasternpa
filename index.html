@@ -110,10 +110,11 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 
 /* Hydro / AQI small grids */
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-.aqi-cell{background:var(--raise);border:1px solid var(--line-soft);padding:8px;text-align:center;border-radius:2px;cursor:pointer}
+.aqi-cell{background:var(--raise);border:1px solid var(--line-soft);padding:6px 4px;text-align:center;border-radius:2px;cursor:pointer}
 .aqi-cell:hover{border-color:var(--amber)}
-.aqi-n{font-family:var(--font-mono);font-size:22px;font-weight:700}
-.aqi-l{font-size:10px;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.aqi-n{font-family:var(--font-mono);font-size:14px;font-weight:600;margin:3px 0}
+.aqi-l{font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-dim)}
+.aqi-cell .lab{font-size:10px;color:var(--text-dim);font-family:var(--font-mono);text-transform:uppercase}
 
 .btn-link{background:transparent;border:1px solid var(--line);color:var(--cyan);padding:4px 8px;font-family:var(--font-mono);
   font-size:11px;cursor:pointer;border-radius:2px;width:100%;text-align:left;margin-top:4px}
@@ -224,9 +225,9 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
         <div class="panel-hd">Tides · 8545240 <span class="tag">NOAA</span></div>
         <div class="panel-bd" id="panel-tides">Tides…</div>
       </section>
-      <section class="panel" style="flex:0 0 auto;max-height:22%">
-        <div class="panel-hd">PHI Discussion <span class="tag">NWS AFD</span></div>
-        <div class="panel-bd" id="panel-afd" style="font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;cursor:pointer">AFD…</div>
+      <section class="panel" style="flex:0 0 auto">
+        <div class="panel-hd">KPHL Airport <span class="tag">NWS · CLICK</span></div>
+        <div class="panel-bd" id="panel-kphl">Loading KPHL…</div>
       </section>
     </div>
   </main>
