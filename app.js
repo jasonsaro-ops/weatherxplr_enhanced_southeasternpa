@@ -554,26 +554,25 @@ async function fetchKPHL() {
     const icon = p.icon || "";
 
     $("panel-kphl").innerHTML = `
-      <div class="row-item" style="flex-direction:column;align-items:stretch;gap:8px" onclick="openKPHL()">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-          <div style="display:flex;align-items:center;gap:10px">
-            ${icon ? `<img src="${icon}" alt="" style="width:40px;height:40px">` : ""}
-            <div>
-              <div class="nm" style="font-size:14px">KPHL · Philadelphia Intl</div>
-              <div class="sub">${desc}</div>
+      <div class="kphl-card" onclick="openKPHL()" title="Open full KPHL detail + AFD">
+        <div class="kphl-top">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            ${icon ? `<img src="${icon}" alt="" style="width:36px;height:36px;flex-shrink:0">` : ""}
+            <div style="min-width:0">
+              <div class="nm" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">KPHL · Philadelphia Intl</div>
+              <div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${desc}</div>
             </div>
           </div>
-          <div class="rv" style="font-size:28px;font-family:var(--font-display)">${tF}°</div>
+          <div class="kphl-temp">${tF}°</div>
         </div>
-        <div class="g2">
-          <div class="metric"><div class="lab">Dewpoint</div><div class="val">${dF}°</div></div>
-          <div class="metric"><div class="lab">Humidity</div><div class="val">${rh}%</div></div>
-          <div class="metric"><div class="lab">Wind</div><div class="val">${wind} mph${gust != null ? " G" + gust : ""}</div></div>
+        <div class="kphl-grid">
+          <div class="metric"><div class="lab">Dew</div><div class="val">${dF}°</div></div>
+          <div class="metric"><div class="lab">RH</div><div class="val">${rh}%</div></div>
+          <div class="metric"><div class="lab">Wind</div><div class="val">${wind}${gust != null ? "G" + gust : ""}</div></div>
           <div class="metric"><div class="lab">Dir</div><div class="val">${dir}°</div></div>
-          <div class="metric"><div class="lab">Visibility</div><div class="val">${vis} mi</div></div>
-          <div class="metric"><div class="lab">Pressure</div><div class="val">${press} hPa</div></div>
+          <div class="metric"><div class="lab">Vis</div><div class="val">${vis} mi</div></div>
+          <div class="metric"><div class="lab">Pres</div><div class="val">${press}</div></div>
         </div>
-        <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">Click for full METAR · AFD · ${p.timestamp ? new Date(p.timestamp).toLocaleTimeString() : ""}</div>
       </div>`;
   } catch (e) {
     $("panel-kphl").innerHTML = `<span class="err">KPHL unavailable</span>`;

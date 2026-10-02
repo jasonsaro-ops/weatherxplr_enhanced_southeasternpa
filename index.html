@@ -44,10 +44,12 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 .clock{font-family:var(--font-mono);font-size:13px;color:var(--amber);letter-spacing:.5px;font-variant-numeric:tabular-nums}
 
 /* MAIN GRID */
-.main{grid-area:main;display:grid;grid-template-columns:minmax(280px,1.05fr) minmax(360px,1.6fr) minmax(280px,1.05fr);
+.main{grid-area:main;display:grid;grid-template-columns:minmax(260px,1.05fr) minmax(340px,1.6fr) minmax(260px,1.05fr);
   grid-template-rows:1fr;gap:8px;padding:8px;min-height:0;overflow:hidden}
-.col{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:hidden}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:3px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.col{display:flex;flex-direction:column;gap:8px;min-height:0;overflow-x:hidden;overflow-y:auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:3px;display:flex;flex-direction:column;min-height:0;overflow:hidden;flex-shrink:0}
+.panel.grow{flex:1 1 auto;min-height:120px;flex-shrink:1}
+.panel.compact{flex:0 0 auto}
 .panel.sev-extreme{border-color:var(--sev-extreme);box-shadow:inset 3px 0 0 var(--sev-extreme)}
 .panel.sev-severe{border-color:var(--sev-severe);box-shadow:inset 3px 0 0 var(--sev-severe)}
 .panel.sev-moderate{border-color:var(--sev-moderate);box-shadow:inset 3px 0 0 var(--sev-moderate)}
@@ -55,11 +57,12 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 .panel-hd{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:1px solid var(--line-soft);
   font-family:var(--font-display);font-weight:600;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--text-mid);flex-shrink:0}
 .panel-hd .tag{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);font-weight:500;letter-spacing:.3px}
-.panel-bd{padding:8px 10px;overflow-y:auto;flex:1;min-height:0}
+.panel-bd{padding:8px 10px;overflow-y:auto;overflow-x:hidden;flex:1;min-height:0}
+.panel.compact .panel-bd{overflow:visible;flex:0 0 auto}
 
 /* Current conditions hero */
 .cond-hero{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;margin-bottom:10px}
-.cond-temp{font-family:var(--font-display);font-size:48px;font-weight:700;line-height:1;color:var(--text-hi)}
+.cond-temp{font-family:var(--font-display);font-size:clamp(32px,4.5vh,48px);font-weight:700;line-height:1;color:var(--text-hi)}
 .cond-unit{font-size:18px;color:var(--text-mid)}
 .cond-desc{font-size:14px;color:var(--text-mid);margin-top:2px}
 .cond-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px}
@@ -119,6 +122,14 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 .btn-link{background:transparent;border:1px solid var(--line);color:var(--cyan);padding:4px 8px;font-family:var(--font-mono);
   font-size:11px;cursor:pointer;border-radius:2px;width:100%;text-align:left;margin-top:4px}
 .btn-link:hover{border-color:var(--cyan);background:rgba(46,196,182,.06)}
+.kphl-card{cursor:pointer;display:flex;flex-direction:column;gap:6px}
+.kphl-card:hover .kphl-top{border-color:var(--amber)}
+.kphl-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;
+  background:var(--raise);border:1px solid var(--line-soft);border-radius:2px}
+.kphl-temp{font-family:var(--font-display);font-size:32px;font-weight:700;color:var(--cyan);line-height:1}
+.kphl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.kphl-grid .metric{padding:4px 6px}
+.kphl-grid .val{font-size:12px}
 
 /* FOOTER */
 .foot{grid-area:foot;height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;
@@ -148,12 +159,12 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 .err{color:var(--err);font-size:12px}
 
 @media (max-width:1100px){
-  .main{grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr}
-  .col-center{grid-column:1/-1;min-height:320px}
+  .main{grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr) minmax(0,1fr);overflow-y:auto}
+  .col-center{grid-column:1/-1;min-height:280px}
 }
 @media (max-width:720px){
   .main{grid-template-columns:1fr;overflow-y:auto}
-  .col{min-height:240px}
+  .col{min-height:0}
 }
 </style>
 </head>
@@ -182,15 +193,15 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
   <main class="main">
     <!-- LEFT -->
     <div class="col col-left">
-      <section class="panel" style="flex:0 0 auto;max-height:42%">
+      <section class="panel compact">
         <div class="panel-hd">Conditions <span class="tag" id="cond-src">OPEN-METEO · NWS</span></div>
         <div class="panel-bd" id="panel-conditions">Loading…</div>
       </section>
-      <section class="panel" id="panel-alerts-wrap" style="flex:1">
+      <section class="panel grow" id="panel-alerts-wrap">
         <div class="panel-hd">Active Alerts · PA <span class="tag" id="alert-tag">—</span></div>
         <div class="panel-bd" id="panel-alerts">Scanning NWS…</div>
       </section>
-      <section class="panel" style="flex:0 0 auto;max-height:28%">
+      <section class="panel compact">
         <div class="panel-hd">Surface Obs <span class="tag">NWS</span></div>
         <div class="panel-bd" id="panel-obs">Stations…</div>
       </section>
@@ -198,14 +209,14 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 
     <!-- CENTER -->
     <div class="col col-center">
-      <section class="panel" style="flex:1;display:flex;flex-direction:column">
+      <section class="panel grow" style="display:flex;flex-direction:column;min-height:220px">
         <div class="panel-hd">Radar / Model Array <span class="tag">WINDY · LIVE</span></div>
         <div class="radar-wrap">
           <select class="layer-sel" id="layer-sel"></select>
           <iframe id="radar-frame" title="Radar"></iframe>
         </div>
       </section>
-      <section class="panel" style="flex:0 0 auto;max-height:36%">
+      <section class="panel compact">
         <div class="panel-hd">7-Day · Hourly <span class="tag">NWS · OPEN-METEO</span></div>
         <div class="panel-bd" id="panel-forecast">Forecast…</div>
       </section>
@@ -213,21 +224,21 @@ body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(
 
     <!-- RIGHT -->
     <div class="col col-right">
-      <section class="panel" style="flex:0 0 auto">
+      <section class="panel compact">
         <div class="panel-hd">Air Quality <span class="tag">OPEN-METEO AQ</span></div>
         <div class="panel-bd" id="panel-aqi">AQI…</div>
       </section>
-      <section class="panel" style="flex:0 0 auto">
+      <section class="panel compact">
+        <div class="panel-hd">KPHL Airport <span class="tag">NWS · CLICK</span></div>
+        <div class="panel-bd" id="panel-kphl">Loading KPHL…</div>
+      </section>
+      <section class="panel compact">
         <div class="panel-hd">Hydrology <span class="tag">USGS SCHUYLKILL</span></div>
         <div class="panel-bd" id="panel-hydro">Gauges…</div>
       </section>
-      <section class="panel" style="flex:1;min-height:140px">
+      <section class="panel grow" style="min-height:130px">
         <div class="panel-hd">Tides · 8545240 <span class="tag">NOAA</span></div>
         <div class="panel-bd" id="panel-tides">Tides…</div>
-      </section>
-      <section class="panel" style="flex:0 0 auto">
-        <div class="panel-hd">KPHL Airport <span class="tag">NWS · CLICK</span></div>
-        <div class="panel-bd" id="panel-kphl">Loading KPHL…</div>
       </section>
     </div>
   </main>
