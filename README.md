@@ -1,17 +1,19 @@
 # WEATHERXPLR · SE-PA Mission Display
 
 Dense, always-on weather operations display for Southeastern Pennsylvania.
+Styled after **NWSXPLR** (boot screen, arc gauges, IBM Plex, severity borders).
 
-**Stack:** NWS API · Open-Meteo · Open-Meteo AQ · USGS · NOAA Tides · Windy embed  
-**Cycle:** 120 seconds full refresh  
-**Focus:** 40.0759°N, 75.2996°W · ZIP 19428 · PHI CWA
+**Stack:** NWS · Open-Meteo (weather + AQ) · SPC · USGS · NOAA Tides · Windy  
+**Cycle:** 120 s full refresh  
+**Focus:** 40.0759°N, 75.2996°W · ZIP 19428 · PHI CWA  
 
-## Design
-- Montcoxplr-style ops console (Rajdhani / JetBrains Mono / Inter)
-- Single radar array (no dual maps, no Golden Layout)
-- CSS grid mission board — left conditions/alerts/obs · center radar+forecast · right AQI/hydro/tides/AFD
-- Floating detail modals with severity-colored borders
-- Tiered alert tones (extreme wail · severe chime · advisory beep)
+## Features
+- NWSXPLR-style animated boot / startup screen
+- Arc gauges (temp, humidity, pressure) + wind compass
+- Minimal scrolling — dense layout for quad-box / multi-monitor
+- All tiles clickable → floating modals for full data / alerts / AFD / hydrographs
+- Alerts: NWS PA + NJ + DE, SPC Day-1 (in-app graphic), tiered tones
+- Single Windy radar/model array with layer selector
 
 ## Deploy
-Static site for GitHub Pages — push `index.html`, `app.js`, `README.md`.
+Static GitHub Pages — push `index.html`, `app.js`, `README.md`.
