@@ -95,6 +95,22 @@
 .btn{background:transparent;border:1px solid var(--line);color:var(--cyan);padding:6px 10px;border-radius:4px;font-family:var(--font-mono);font-size:10px;cursor:pointer;margin-top:8px}.btn:hover{border-color:var(--cyan);background:rgba(59,158,255,.1)}
 .empty{color:var(--green);font-size:11px;padding:6px 0}.err{color:var(--red);font-size:11px}
 @media(max-width:1100px){.main{grid-template-columns:240px 1fr}.rail.right{display:none}}
+
+/* Storm 3D modal */
+.s3d-wrap{display:grid;grid-template-columns:240px 1fr;gap:0;min-height:420px;height:min(70vh,560px)}
+.s3d-side{background:var(--raise);border-right:1px solid var(--line);padding:12px;overflow-y:auto}
+.s3d-side h3{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;color:var(--cyan);margin-bottom:8px;text-transform:uppercase}
+.s3d-metric{margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.s3d-metric .k{font-size:10px;color:var(--text-dim)}.s3d-metric .v{font-family:var(--font-mono);font-size:16px;font-weight:600}
+.s3d-scale{height:10px;border-radius:3px;margin:8px 0;background:linear-gradient(90deg,#1a9850,#91cf60,#fee08b,#fc8d59,#d73027,#c51b7d)}
+.s3d-scale-lbl{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim)}
+.s3d-canvas-wrap{position:relative;background:#05070c}
+#s3d-canvas{width:100%;height:100%;display:block}
+.s3d-badge{position:absolute;right:10px;bottom:10px;background:rgba(18,21,28,.9);border:1px solid var(--line);padding:4px 8px;border-radius:4px;font-size:10px;font-family:var(--font-mono);color:var(--text-mid)}
+.s3d-disclaimer{font-size:10px;color:var(--text-dim);line-height:1.4;margin-top:10px}
+.modal.wide{width:min(960px,96vw)}
+@media(max-width:700px){.s3d-wrap{grid-template-columns:1fr;height:auto}.s3d-canvas-wrap{height:320px}}
+
 </style>
 </head>
 <body>
@@ -103,7 +119,8 @@
 <header class="top">
   <div class="brand"><div class="brand-mark"></div><div><div class="brand-name">WEATHERXPLR</div><div class="brand-tag">SE-PA · 40.08°N 75.30°W</div></div></div>
   <div class="nav-tabs"><div class="nav-tab on" data-view="map">Map</div><div class="nav-tab" data-view="alerts">Alerts</div><div class="nav-tab" data-view="models">Models</div></div>
-  <div class="top-mid"><div class="clock" id="clock">--:--:--</div><div class="chip live" id="chip-status">ONLINE</div><div class="chip" id="chip-alerts">ALERTS 0</div><div class="chip btn" id="btn-audio"><i class="fa-solid fa-volume-xmark" id="audio-ico"></i> <span id="audio-lbl">TONES</span></div></div>
+  <div class="top-mid"><div class="clock" id="clock">--:--:--</div><div class="chip live" id="chip-status">ONLINE</div><div class="chip" id="chip-alerts">ALERTS 0</div><div class="chip btn" id="chip-storm3d" title="Open Storm 3D"><i class="fa-solid fa-cube"></i> STORM 3D</div>
+      <div class="chip btn" id="btn-audio"><i class="fa-solid fa-volume-xmark" id="audio-ico"></i> <span id="audio-lbl">TONES</span></div></div>
   <div class="top-right"><div class="chip">CYCLE <b id="cd" style="color:var(--text)">120</b>s</div><div class="chip" id="chip-sync">SYNC --</div></div>
 </header>
 <div class="main">
@@ -142,6 +159,7 @@
     <div class="map-tools">
       <button type="button" class="map-btn" id="btn-layers" title="Layers"><i class="fa-solid fa-layer-group"></i></button>
       <button type="button" class="map-btn" id="btn-home" title="Home"><i class="fa-solid fa-crosshairs"></i></button>
+      <button type="button" class="map-btn" id="btn-storm3d" title="Storm 3D"><i class="fa-solid fa-cube"></i></button>
     </div>
     <div class="layer-pop" id="layer-pop">
       <h4>Radar / Imagery</h4>
@@ -200,6 +218,7 @@
 </div>
 <div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"><div class="modal-hd"><span id="modal-title">Detail</span><span class="modal-x" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></span></div><div class="modal-bd" id="modal-body"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

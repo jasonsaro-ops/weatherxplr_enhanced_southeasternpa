@@ -1,0 +1,6 @@
+name = "weatherxplr-storm3d"
+main = "storm3d.js"
+compatibility_date = "2024-11-01"
+
+# After deploy, set your worker URL in the frontend:
+# const STORM3D_WORKER = "https://weatherxplr-storm3d.<your-subdomain>.workers.dev";
