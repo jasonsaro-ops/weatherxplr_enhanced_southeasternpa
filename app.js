@@ -282,7 +282,9 @@ document.addEventListener("DOMContentLoaded",boot);
 /* ========== STORM 3D (Three.js + optional CF Worker) ========== */
 // Set after you deploy the worker, e.g.:
 // "https://weatherxplr-storm3d.YOUR_SUBDOMAIN.workers.dev"
-const STORM3D_WORKER = localStorage.getItem("wx_storm3d_worker") || "";
+// Auto: 1) window.STORM3D_WORKER_URL in index.html  2) localStorage  3) empty = client heuristics
+const STORM3D_WORKER = (typeof window !== "undefined" && window.STORM3D_WORKER_URL) ||
+  localStorage.getItem("wx_storm3d_worker") || "";
 
 let s3d = { renderer:null, scene:null, camera:null, cloud:null, anim:null, data:null };
 

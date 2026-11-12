@@ -219,6 +219,12 @@
 <div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"><div class="modal-hd"><span id="modal-title">Detail</span><span class="modal-x" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></span></div><div class="modal-bd" id="modal-body"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<!-- Storm 3D Worker: set this once after first GitHub Actions deploy -->
+<script>
+  // Example: "https://weatherxplr-storm3d.YOUR_SUBDOMAIN.workers.dev"
+  // Leave "" until the Action has deployed; board still works client-side.
+  window.STORM3D_WORKER_URL = "";
+</script>
 <script src="app.js"></script>
 </body>
 </html>
