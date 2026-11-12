@@ -1,265 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="theme-color" content="#070a10" />
-<title>WEATHERXPLR · SE-PA Mission Display</title>
-<meta name="description" content="Mission-critical weather display for Southeastern Pennsylvania — NWS + Open-Meteo." />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#0a0c10"/>
+<title>WEATHERXPLR · SE-PA Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 <style>
-:root{
-  --bg:#070a10; --panel:#0b1220; --raise:#101a2a; --line:#1c2838; --line-b:#2a3a50;
-  --text:#e2e8f0; --text-hi:#f8fafc; --text-mid:#94a3b8; --text-dim:#64748b;
-  --cyan:#06b6d4; --amber:#f59e0b; --green:#22c55e; --blue:#3b82f6; --red:#ef4444; --orange:#f97316;
-  --sev-extreme:#ef4444; --sev-severe:#f97316; --sev-moderate:#eab308; --sev-minor:#3b82f6; --sev-unknown:#64748b;
-  --font-sans:"IBM Plex Sans",system-ui,sans-serif; --font-mono:"IBM Plex Mono",ui-monospace,monospace;
-  --radius:5px;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:12px;overflow:hidden;-webkit-font-smoothing:antialiased}
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--line-b);border-radius:3px}
-
-/* BOOT */
-#boot-screen{position:fixed;inset:0;background:radial-gradient(ellipse at center,#0c1524 0%,#05070c 70%);display:flex;align-items:center;justify-content:center;z-index:9999;transition:opacity .55s ease,visibility .55s}
-#boot-screen.fade-out{opacity:0;visibility:hidden;pointer-events:none}
-.boot-inner{text-align:center;max-width:380px;padding:24px}
-.boot-logo{margin-bottom:18px}
-.boot-logo svg{filter:drop-shadow(0 0 18px rgba(6,182,212,.4))}
-.wx-arc{stroke-dasharray:120;stroke-dashoffset:120;animation:drawArc 2s ease forwards}
-.wx-arc.a2{animation-delay:.3s}
-@keyframes drawArc{to{stroke-dashoffset:0}}
-.orbit-dot{animation:orbit 4s linear infinite;transform-origin:60px 60px}
-.orbit-dot.d2{animation-duration:6s;animation-direction:reverse}
-@keyframes orbit{from{transform:rotate(0) translateY(-38px) rotate(0)}to{transform:rotate(360deg) translateY(-38px) rotate(-360deg)}}
-.boot-title{font-family:var(--font-mono);font-weight:600;font-size:26px;letter-spacing:.32em;color:var(--text-hi);margin-bottom:6px}
-.boot-sub{font-size:10px;letter-spacing:.16em;color:var(--text-dim);margin-bottom:24px}
-.boot-bar{height:2px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;margin-bottom:12px}
-.boot-progress{height:100%;width:0%;background:linear-gradient(90deg,var(--cyan),var(--amber));transition:width .3s ease}
-.boot-status{font-family:var(--font-mono);font-size:11px;color:var(--text-mid);letter-spacing:.06em;min-height:1.3em}
-.boot-meta{margin-top:22px;font-size:9px;color:var(--text-dim);letter-spacing:.1em}
-
-#app{height:100vh;display:grid;grid-template-rows:36px 1fr 22px;opacity:0;transition:opacity .4s ease}
-#app.ready{opacity:1}
-
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:0 10px;background:linear-gradient(180deg,var(--raise),var(--panel));border-bottom:1px solid var(--line);gap:8px}
-.brand{display:flex;align-items:center;gap:8px}
-.brand-mark{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
-.brand-title{font-family:var(--font-mono);font-weight:600;font-size:13px;letter-spacing:.2em;color:var(--cyan)}
-.brand-sub{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:.06em}
-.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border:1px solid var(--line);background:var(--raise);font-family:var(--font-mono);font-size:10px;color:var(--text-mid);border-radius:2px;white-space:nowrap}
-.chip.live{border-color:var(--green);color:var(--green)}
-.chip.alert{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.08)}
-.chip.btn{cursor:pointer}.chip.btn:hover{border-color:var(--cyan);color:var(--cyan)}
-.chip.audio-on{border-color:var(--green);color:var(--green)}
-.clock{font-family:var(--font-mono);font-size:12px;color:var(--amber);letter-spacing:.04em}
-.hdr-mid{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-
-.main{display:grid;grid-template-columns:minmax(220px,.95fr) minmax(300px,1.5fr) minmax(220px,.95fr);gap:6px;padding:6px;min-height:0;overflow:hidden}
-.col{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column;min-height:0;overflow:hidden}
-.panel.grow{flex:1 1 0;min-height:0}
-.panel.fix{flex:0 0 auto}
-.panel.sev-extreme{box-shadow:inset 3px 0 0 var(--sev-extreme);border-color:var(--sev-extreme)}
-.panel.sev-severe{box-shadow:inset 3px 0 0 var(--sev-severe);border-color:var(--sev-severe)}
-.panel.sev-moderate{box-shadow:inset 3px 0 0 var(--sev-moderate);border-color:var(--sev-moderate)}
-.panel.sev-minor{box-shadow:inset 3px 0 0 var(--sev-minor);border-color:var(--sev-minor)}
-.phd{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-mid);flex-shrink:0}
-.phd .tag{color:var(--text-dim);font-weight:400;letter-spacing:.04em}
-.pbd{padding:6px 8px;overflow:hidden;flex:1;min-height:0;display:flex;flex-direction:column}
-.pbd.scroll{overflow-y:auto}
-
-/* Gauges */
-.gauge-row{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-.gauge-card{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 3px 2px;text-align:center;cursor:pointer;min-height:0;transition:border-color .12s}
-.gauge-card:hover{border-color:var(--cyan)}
-.gauge-card .g-title{font-family:var(--font-mono);font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1px}
-.gauge-card svg.gauge-svg{width:100%;max-width:100px;height:auto;display:block;margin:0 auto}
-.compass-rose{width:100%;max-width:90px;margin:0 auto;display:block}
-.compass-rose .needle{transform-origin:50px 50px;transition:transform .5s ease}
-
-.obs-mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
-.obs-mini{background:var(--raise);border:1px solid var(--line);border-radius:3px;padding:4px 6px;cursor:pointer}
-.obs-mini:hover{border-color:var(--cyan)}
-.obs-mini .om-label{font-size:8px;font-family:var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim)}
-.obs-mini .om-val{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text-hi)}
-
-.alert-card{border-left:3px solid var(--sev-unknown);background:var(--raise);padding:5px 7px;margin-bottom:4px;border-radius:0 3px 3px 0;cursor:pointer}
-.alert-card:hover{filter:brightness(1.1)}
-.alert-card.sev-extreme{border-left-color:var(--sev-extreme);background:#2a1212}
-.alert-card.sev-severe{border-left-color:var(--sev-severe);background:#2a1a10}
-.alert-card.sev-moderate{border-left-color:var(--sev-moderate);background:#242010}
-.alert-card.sev-minor{border-left-color:var(--sev-minor);background:#121a2a}
-.alert-ev{font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.02em}
-.alert-meta{font-size:9px;color:var(--text-dim);margin-top:1px;line-height:1.3}
-
-.row-item{display:flex;justify-content:space-between;align-items:center;padding:4px 6px;background:var(--raise);border:1px solid var(--line);margin-bottom:3px;border-radius:3px;cursor:pointer;gap:6px}
-.row-item:hover{border-color:var(--cyan)}
-.row-item .nm{font-weight:600;font-size:11px}
-.row-item .sub{font-size:9px;color:var(--text-dim)}
-.row-item .rv{font-family:var(--font-mono);font-weight:600;font-size:12px;color:var(--cyan)}
-
-.aqi-duo{display:grid;grid-template-columns:1fr 1fr;gap:3px}
-.aqi-duo .row-item{margin:0;padding:3px 5px}
-.aqi-duo .nm{font-size:10px}.aqi-duo .rv{font-size:11px}
-
-.fc-row,.hr-row{display:flex;gap:3px;overflow:hidden}
-.fc-day,.hr-cell{flex:1 1 0;min-width:0;background:var(--raise);border:1px solid var(--line);padding:4px 2px;text-align:center;border-radius:3px;cursor:pointer}
-.fc-day:hover,.hr-cell:hover{border-color:var(--amber)}
-.fc-day .d,.hr-cell .h{font-size:8px;color:var(--text-dim);font-family:var(--font-mono);text-transform:uppercase}
-.fc-day .t{font-family:var(--font-mono);font-weight:600;font-size:11px;margin:2px 0}
-.fc-day .hi{color:var(--orange)}.fc-day .lo{color:var(--blue)}
-.hr-cell .t{font-family:var(--font-mono);font-size:11px;font-weight:600}
-.hr-cell .p{font-size:8px;color:var(--blue)}
-
-.radar-wrap{position:relative;flex:1;min-height:0;background:#05080c}
-.radar-wrap iframe{width:100%;height:100%;border:none}
-.layer-sel{position:absolute;top:6px;left:6px;z-index:5;background:rgba(7,10,16,.94);color:var(--amber);border:1px solid rgba(245,158,11,.4);padding:3px 6px;font-family:var(--font-mono);font-size:10px;border-radius:2px;cursor:pointer;max-width:140px}
-
-.kphl-top{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 6px;background:var(--raise);border:1px solid var(--line);border-radius:3px;cursor:pointer;margin-bottom:4px}
-.kphl-top:hover{border-color:var(--cyan)}
-.kphl-temp{font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--cyan);line-height:1}
-.kphl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
-.kphl-grid .obs-mini{padding:3px 4px}
-
-.btn-link{background:transparent;border:1px solid var(--line);color:var(--cyan);padding:3px 6px;font-family:var(--font-mono);font-size:10px;cursor:pointer;border-radius:2px}
-.btn-link:hover{border-color:var(--cyan);background:rgba(6,182,212,.08)}
-.empty{color:var(--green);font-size:11px;padding:4px 0}
-.err{color:var(--red);font-size:11px}
-
-.foot{display:flex;align-items:center;justify-content:space-between;padding:0 10px;border-top:1px solid var(--line);background:var(--panel);font-family:var(--font-mono);font-size:9px;color:var(--text-dim)}
-.feeds{display:flex;gap:10px}
-.fd{display:inline-flex;align-items:center;gap:3px}
-.fd .d{width:5px;height:5px;border-radius:50%;background:var(--green)}.fd .d.off{background:var(--red)}
-
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(4,8,12,.88);backdrop-filter:blur(4px);z-index:9000;justify-content:center;align-items:center;padding:16px}
-.modal-bg.open{display:flex}
-.modal{background:var(--panel);border:1px solid var(--line-b);border-radius:6px;width:min(680px,96vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 12px 48px rgba(0,0,0,.55)}
-.modal.sev-extreme{border-color:var(--sev-extreme)}.modal.sev-severe{border-color:var(--sev-severe)}
-.modal.sev-moderate{border-color:var(--sev-moderate)}.modal.sev-minor{border-color:var(--sev-minor)}
-.modal-hd{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan)}
-.modal-x{cursor:pointer;color:var(--text-dim);font-size:14px;padding:4px 6px}.modal-x:hover{color:var(--red)}
-.modal-bd{padding:14px;overflow-y:auto;font-size:13px;line-height:1.5;color:var(--text)}
-
-@media(max-width:1000px){.main{grid-template-columns:1fr 1fr}.col-center{grid-column:1/-1;min-height:240px}}
+:root{--bg:#0a0c10;--panel:#12151c;--raise:#181c26;--raise2:#1e2430;--line:#2a3140;--line-b:#3a4458;--text:#e8edf5;--text-mid:#9aa8bc;--text-dim:#6b7a90;--cyan:#3b9eff;--cyan2:#06b6d4;--amber:#f5a623;--green:#2ecc71;--red:#ef4444;--orange:#f97316;--purple:#a78bfa;--sev-extreme:#ef4444;--sev-severe:#f97316;--sev-moderate:#eab308;--sev-minor:#3b82f6;--font-sans:"IBM Plex Sans",system-ui,sans-serif;--font-mono:"IBM Plex Mono",ui-monospace,monospace;--r:6px;--hdr:44px}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:12px;overflow:hidden}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:var(--line-b);border-radius:3px}
+#boot{position:fixed;inset:0;z-index:9999;background:radial-gradient(ellipse at 50% 40%,#12182a 0%,#07090e 70%);display:flex;align-items:center;justify-content:center;transition:opacity .5s,visibility .5s}
+#boot.out{opacity:0;visibility:hidden;pointer-events:none}
+.boot-box{text-align:center}.boot-logo{width:72px;height:72px;margin:0 auto 16px;border-radius:50%;border:2px solid rgba(59,158,255,.35);display:flex;align-items:center;justify-content:center;box-shadow:0 0 24px rgba(59,158,255,.25)}
+.boot-logo i{font-size:28px;color:var(--cyan)}.boot-title{font-family:var(--font-mono);font-size:22px;letter-spacing:.28em;font-weight:600}
+.boot-sub{font-size:10px;color:var(--text-dim);letter-spacing:.14em;margin:6px 0 20px}
+.boot-bar{height:2px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;margin-bottom:10px}
+.boot-prog{height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--cyan2));transition:width .3s}
+.boot-st{font-family:var(--font-mono);font-size:11px;color:var(--text-mid)}
+#app{height:100vh;display:grid;grid-template-rows:var(--hdr) 1fr 28px;opacity:0;transition:opacity .4s}#app.on{opacity:1}
+.top{display:flex;align-items:center;background:var(--panel);border-bottom:1px solid var(--line);padding:0 10px}
+.brand{display:flex;align-items:center;gap:8px;padding-right:14px;border-right:1px solid var(--line);margin-right:4px}
+.brand-mark{width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.brand-name{font-family:var(--font-mono);font-weight:600;font-size:13px;letter-spacing:.12em}
+.brand-tag{font-size:9px;color:var(--text-dim)}
+.nav-tabs{display:flex;height:100%}.nav-tab{padding:0 16px;display:flex;align-items:center;font-size:12px;font-weight:500;color:var(--text-mid);border-bottom:2px solid transparent;cursor:pointer}
+.nav-tab:hover{color:var(--text)}.nav-tab.on{color:var(--text);border-bottom-color:var(--cyan)}
+.top-mid{flex:1;display:flex;align-items:center;justify-content:center;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--line);background:var(--raise);border-radius:4px;font-family:var(--font-mono);font-size:10px;color:var(--text-mid)}
+.chip.live{border-color:var(--green);color:var(--green)}.chip.alert{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.1)}
+.chip.btn{cursor:pointer}.chip.btn:hover{border-color:var(--cyan);color:var(--cyan)}.chip.on{border-color:var(--green);color:var(--green)}
+.clock{font-family:var(--font-mono);font-size:12px;color:var(--amber)}.top-right{display:flex;align-items:center;gap:6px}
+.main{display:grid;grid-template-columns:280px 1fr 260px;min-height:0;overflow:hidden}
+.rail{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.rail.right{border-right:none;border-left:1px solid var(--line)}
+.seg{display:flex;padding:6px;gap:4px;border-bottom:1px solid var(--line);flex-shrink:0}
+.seg button{flex:1;padding:6px 4px;border:1px solid var(--line);background:var(--raise);color:var(--text-mid);border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.04em;cursor:pointer;text-transform:uppercase}
+.seg button.on{background:var(--cyan);color:#0a0c10;border-color:var(--cyan)}
+.rail-body{flex:1;overflow-y:auto;padding:8px;min-height:0}.pane{display:none}.pane.on{display:block}
+.card{background:var(--raise);border:1px solid var(--line);border-radius:var(--r);padding:8px;margin-bottom:8px;cursor:pointer;transition:border-color .12s}
+.card:hover{border-color:var(--cyan)}.card-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.card-title{font-size:10px;font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
+.card-val{font-family:var(--font-mono);font-size:22px;font-weight:600;line-height:1.1}.card-unit{font-size:11px;color:var(--text-mid);font-weight:400}
+.card-sub{font-size:10px;color:var(--text-dim);margin-top:2px}
+.gauge-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.g-tile{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 4px;text-align:center;cursor:pointer}
+.g-tile:hover{border-color:var(--cyan)}.g-tile .lbl{font-size:8px;font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
+.g-tile svg{width:100%;max-width:90px;height:auto;display:block;margin:2px auto 0}
+.metric-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)}
+.metric-row:last-child{border-bottom:none}.metric-row .k{font-size:10px;color:var(--text-dim)}.metric-row .v{font-family:var(--font-mono);font-weight:600;font-size:12px}
+.alert-item{border-left:3px solid var(--text-dim);background:var(--raise);padding:7px 8px;margin-bottom:5px;border-radius:0 var(--r) var(--r) 0;cursor:pointer}
+.alert-item:hover{filter:brightness(1.08)}
+.alert-item.sev-extreme{border-left-color:var(--sev-extreme);background:#2a1214}
+.alert-item.sev-severe{border-left-color:var(--sev-severe);background:#2a1a10}
+.alert-item.sev-moderate{border-left-color:var(--sev-moderate);background:#242010}
+.alert-item.sev-minor{border-left-color:var(--sev-minor);background:#121a2a}
+.alert-ev{font-weight:600;font-size:11px;text-transform:uppercase}.alert-meta{font-size:9px;color:var(--text-dim);margin-top:2px;line-height:1.3}
+.obs-row{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--raise);border:1px solid var(--line);border-radius:4px;margin-bottom:4px;cursor:pointer}
+.obs-row:hover{border-color:var(--cyan)}.obs-row .id{font-weight:600;font-size:11px}.obs-row .nm{font-size:9px;color:var(--text-dim)}.obs-row .tv{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--cyan)}
+.stage{position:relative;background:#05070c;min-height:0;display:flex;flex-direction:column}
+.map-frame{flex:1;position:relative;min-height:0}.map-frame iframe{width:100%;height:100%;border:none}
+.map-tools{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
+.map-btn{width:36px;height:36px;border-radius:8px;border:1px solid var(--line-b);background:rgba(18,21,28,.92);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px}
+.map-btn:hover,.map-btn.on{background:var(--cyan);color:#0a0c10;border-color:var(--cyan)}
+.layer-pop{position:absolute;right:52px;top:10px;width:220px;max-height:70%;overflow-y:auto;z-index:6;background:rgba(18,21,28,.96);border:1px solid var(--line-b);border-radius:8px;padding:8px;display:none}
+.layer-pop.open{display:block}.layer-pop h4{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin:8px 0 4px}.layer-pop h4:first-child{margin-top:0}
+.ly-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:11px}.ly-row:hover{background:var(--raise2)}.ly-row input{accent-color:var(--cyan)}
+.model-bar{position:absolute;left:10px;top:10px;z-index:5;display:flex;gap:4px;flex-wrap:wrap}
+.model-chip{padding:4px 10px;border-radius:4px;border:1px solid var(--line-b);background:rgba(18,21,28,.94);font-family:var(--font-mono);font-size:10px;color:var(--text-mid);cursor:pointer}
+.model-chip.on{background:var(--cyan);color:#0a0c10;border-color:var(--cyan);font-weight:600}
+.time-strip{height:36px;background:var(--panel);border-top:1px solid var(--line);display:flex;align-items:center;padding:0 12px;gap:10px;flex-shrink:0}
+.time-strip .t-lab{font-family:var(--font-mono);font-size:11px;color:var(--amber);min-width:56px}
+.time-track{flex:1;height:6px;background:var(--raise2);border-radius:3px;position:relative;overflow:hidden}
+.time-fill{height:100%;width:35%;background:linear-gradient(90deg,var(--purple),var(--cyan));border-radius:3px}
+.right-hd{padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);flex-shrink:0}
+.fc-table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px}
+.fc-table th{text-align:left;padding:4px 3px;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--line)}
+.fc-table td{padding:4px 3px;border-bottom:1px solid var(--line);font-family:var(--font-mono)}.fc-table tr{cursor:pointer}.fc-table tr:hover td{background:var(--raise2)}
+.hi{color:var(--orange)}.lo{color:var(--cyan2)}
+.spark{height:48px;margin:4px 0 8px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px;cursor:pointer}.spark:hover{border-color:var(--cyan)}
+.model-panel{background:var(--raise);border:1px solid var(--line);border-radius:var(--r);padding:8px;margin-bottom:8px}
+.model-panel h3{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
+.model-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.model-cell{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px;text-align:center;cursor:pointer}
+.model-cell:hover{border-color:var(--cyan)}.model-cell .m-name{font-size:9px;color:var(--text-dim);font-family:var(--font-mono)}.model-cell .m-val{font-size:14px;font-weight:600;font-family:var(--font-mono);margin-top:2px}
+.foot{display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:var(--panel);border-top:1px solid var(--line);font-family:var(--font-mono);font-size:9px;color:var(--text-dim)}
+.feeds{display:flex;gap:12px}.fd{display:inline-flex;align-items:center;gap:4px}.fd .d{width:5px;height:5px;border-radius:50%;background:var(--green)}.fd .d.off{background:var(--red)}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(4,6,10,.88);backdrop-filter:blur(4px);z-index:8000;justify-content:center;align-items:center;padding:16px}
+.modal-bg.open{display:flex}.modal{background:var(--panel);border:1px solid var(--line-b);border-radius:8px;width:min(720px,96vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.55)}
+.modal.sev-extreme{border-color:var(--sev-extreme)}.modal.sev-severe{border-color:var(--sev-severe)}.modal.sev-moderate{border-color:var(--sev-moderate)}.modal.sev-minor{border-color:var(--sev-minor)}
+.modal-hd{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan)}
+.modal-x{cursor:pointer;color:var(--text-dim);padding:4px 6px}.modal-x:hover{color:var(--red)}.modal-bd{padding:16px;overflow-y:auto;font-size:13px;line-height:1.5}
+.btn{background:transparent;border:1px solid var(--line);color:var(--cyan);padding:6px 10px;border-radius:4px;font-family:var(--font-mono);font-size:10px;cursor:pointer;margin-top:8px}.btn:hover{border-color:var(--cyan);background:rgba(59,158,255,.1)}
+.empty{color:var(--green);font-size:11px;padding:6px 0}.err{color:var(--red);font-size:11px}
+@media(max-width:1100px){.main{grid-template-columns:240px 1fr}.rail.right{display:none}}
 </style>
 </head>
 <body>
-<div id="boot-screen">
-  <div class="boot-inner">
-    <div class="boot-logo">
-      <svg viewBox="0 0 120 120" width="88" height="88" aria-hidden="true">
-        <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(6,182,212,0.25)" stroke-width="1.5"/>
-        <circle cx="60" cy="60" r="38" fill="none" stroke="rgba(245,158,11,0.35)" stroke-width="1"/>
-        <path class="wx-arc a1" d="M28 62 Q60 22 92 62" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round"/>
-        <path class="wx-arc a2" d="M36 68 Q60 38 84 68" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
-        <circle cx="60" cy="70" r="7" fill="#06b6d4"/>
-        <circle class="orbit-dot" cx="60" cy="22" r="3.5" fill="#f59e0b"/>
-        <circle class="orbit-dot d2" cx="60" cy="22" r="2.5" fill="#22c55e"/>
-      </svg>
-    </div>
-    <h1 class="boot-title">WEATHERXPLR</h1>
-    <p class="boot-sub">SE-PA · MISSION DISPLAY · PHI CWA</p>
-    <div class="boot-bar"><div class="boot-progress" id="boot-progress"></div></div>
-    <p class="boot-status" id="boot-status">INITIALIZING…</p>
-    <p class="boot-meta">NWS · OPEN-METEO · SPC · RADAR · ALERTS</p>
-  </div>
-</div>
-
+<div id="boot"><div class="boot-box"><div class="boot-logo"><i class="fa-solid fa-satellite-dish"></i></div><div class="boot-title">WEATHERXPLR</div><div class="boot-sub">SE-PA DISPATCH · PHI CWA</div><div class="boot-bar"><div class="boot-prog" id="boot-prog"></div></div><div class="boot-st" id="boot-st">INITIALIZING…</div></div></div>
 <div id="app">
-  <header class="hdr">
-    <div class="brand">
-      <div class="brand-mark" id="live-dot"></div>
-      <div>
-        <div class="brand-title">WEATHERXPLR</div>
-        <div class="brand-sub">SE-PA · 40.08°N 75.30°W · 19428</div>
+<header class="top">
+  <div class="brand"><div class="brand-mark"></div><div><div class="brand-name">WEATHERXPLR</div><div class="brand-tag">SE-PA · 40.08°N 75.30°W</div></div></div>
+  <div class="nav-tabs"><div class="nav-tab on" data-view="map">Map</div><div class="nav-tab" data-view="alerts">Alerts</div><div class="nav-tab" data-view="models">Models</div></div>
+  <div class="top-mid"><div class="clock" id="clock">--:--:--</div><div class="chip live" id="chip-status">ONLINE</div><div class="chip" id="chip-alerts">ALERTS 0</div><div class="chip btn" id="btn-audio"><i class="fa-solid fa-volume-xmark" id="audio-ico"></i> <span id="audio-lbl">TONES</span></div></div>
+  <div class="top-right"><div class="chip">CYCLE <b id="cd" style="color:var(--text)">120</b>s</div><div class="chip" id="chip-sync">SYNC --</div></div>
+</header>
+<div class="main">
+<aside class="rail">
+  <div class="seg"><button type="button" class="on" data-pane="cond">Conditions</button><button type="button" data-pane="alerts">Alerts</button><button type="button" data-pane="obs">Obs</button></div>
+  <div class="rail-body">
+    <div class="pane on" id="pane-cond">
+      <div class="card" onclick="openConditions()"><div class="card-hd"><span class="card-title">Temperature</span><span class="card-sub" id="cond-desc">—</span></div><div class="card-val" id="cond-temp">—<span class="card-unit">°F</span></div><div class="card-sub" id="cond-feels">Feels —</div></div>
+      <div class="gauge-grid" id="gauge-grid"></div>
+      <div class="card" style="margin-top:8px" onclick="openConditions()">
+        <div class="metric-row"><span class="k">Wind</span><span class="v" id="m-wind">—</span></div>
+        <div class="metric-row"><span class="k">Gusts</span><span class="v" id="m-gust">—</span></div>
+        <div class="metric-row"><span class="k">Pressure</span><span class="v" id="m-pres">—</span></div>
+        <div class="metric-row"><span class="k">Humidity</span><span class="v" id="m-rh">—</span></div>
+        <div class="metric-row"><span class="k">Clouds</span><span class="v" id="m-cloud">—</span></div>
+        <div class="metric-row"><span class="k">Precip</span><span class="v" id="m-precip">—</span></div>
       </div>
+      <div class="card" onclick="openKPHL()"><div class="card-hd"><span class="card-title">KPHL</span><span class="card-sub">NWS</span></div><div class="card-val" id="kphl-temp">—<span class="card-unit">°F</span></div><div class="card-sub" id="kphl-desc">Philadelphia Intl</div></div>
     </div>
-    <div class="hdr-mid">
-      <div class="clock" id="clock">--:--:--</div>
-      <div class="chip live" id="chip-status">ONLINE</div>
-      <div class="chip" id="chip-alerts">ALERTS 0</div>
-      <div class="chip btn" id="btn-audio"><i class="fa-solid fa-volume-xmark" id="audio-ico"></i> <span id="audio-lbl">TONES</span></div>
-    </div>
-    <div class="hdr-mid">
-      <div class="chip">CYCLE <b id="cd" style="color:var(--text-hi)">120</b>s</div>
-      <div class="chip" id="chip-sync">SYNC --</div>
-    </div>
-  </header>
-
-  <main class="main">
-    <div class="col">
-      <section class="panel fix">
-        <div class="phd">Conditions <span class="tag">OPEN-METEO</span></div>
-        <div class="pbd" id="panel-conditions"></div>
-      </section>
-      <section class="panel grow" id="panel-alerts-wrap">
-        <div class="phd">Alerts · PA/NJ/DE <span class="tag" id="alert-tag">—</span></div>
-        <div class="pbd scroll" id="panel-alerts"></div>
-      </section>
-      <section class="panel fix">
-        <div class="phd">Surface Obs <span class="tag">NWS</span></div>
-        <div class="pbd scroll" id="panel-obs" style="max-height:120px"></div>
-      </section>
-    </div>
-
-    <div class="col col-center">
-      <section class="panel grow" style="min-height:180px">
-        <div class="phd">Radar / Models <span class="tag">WINDY</span></div>
-        <div class="radar-wrap">
-          <select class="layer-sel" id="layer-sel"></select>
-          <iframe id="radar-frame" title="Radar"></iframe>
-        </div>
-      </section>
-      <section class="panel fix">
-        <div class="phd">7-Day · Hourly <span class="tag">NWS · OM</span></div>
-        <div class="pbd" id="panel-forecast"></div>
-      </section>
-    </div>
-
-    <div class="col">
-      <section class="panel fix">
-        <div class="phd">Air Quality <span class="tag">OM AQ</span></div>
-        <div class="pbd" id="panel-aqi"></div>
-      </section>
-      <section class="panel fix">
-        <div class="phd">KPHL Airport <span class="tag">NWS</span></div>
-        <div class="pbd" id="panel-kphl"></div>
-      </section>
-      <section class="panel fix" style="max-height:28%">
-        <div class="phd">Hydrology <span class="tag">USGS</span></div>
-        <div class="pbd scroll" id="panel-hydro"></div>
-      </section>
-      <section class="panel grow" style="min-height:100px">
-        <div class="phd">Tides · 8545240 <span class="tag">NOAA</span></div>
-        <div class="pbd" id="panel-tides"></div>
-      </section>
-    </div>
-  </main>
-
-  <footer class="foot">
-    <div class="feeds">
-      <span class="fd"><span class="d" id="d-nws"></span>NWS</span>
-      <span class="fd"><span class="d" id="d-om"></span>OM</span>
-      <span class="fd"><span class="d" id="d-aqi"></span>AQ</span>
-      <span class="fd"><span class="d" id="d-hydro"></span>USGS</span>
-      <span class="fd"><span class="d" id="d-tides"></span>TIDES</span>
-    </div>
-    <div>PHI CWA · MONTGOMERY / SE-PA</div>
-    <div>WEATHERXPLR · 120s · QUAD DISPLAY</div>
-  </footer>
-</div>
-
-<div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()">
-  <div class="modal" id="modal">
-    <div class="modal-hd"><span id="modal-title">Detail</span><span class="modal-x" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></span></div>
-    <div class="modal-bd" id="modal-body"></div>
+    <div class="pane" id="pane-alerts"><div id="alerts-list"></div></div>
+    <div class="pane" id="pane-obs"><div id="obs-list"></div></div>
   </div>
+</aside>
+<section class="stage">
+  <div class="map-frame">
+    <div class="model-bar">
+      <div class="model-chip on" data-model="radar">Radar</div>
+      <div class="model-chip" data-model="satellite">Sat</div>
+      <div class="model-chip" data-model="wind">Wind</div>
+      <div class="model-chip" data-model="temp">Temp</div>
+      <div class="model-chip" data-model="rain">Precip</div>
+      <div class="model-chip" data-model="clouds">Clouds</div>
+      <div class="model-chip" data-model="thunder">CAPE</div>
+    </div>
+    <iframe id="radar" title="Radar"></iframe>
+    <div class="map-tools">
+      <button type="button" class="map-btn" id="btn-layers" title="Layers"><i class="fa-solid fa-layer-group"></i></button>
+      <button type="button" class="map-btn" id="btn-home" title="Home"><i class="fa-solid fa-crosshairs"></i></button>
+    </div>
+    <div class="layer-pop" id="layer-pop">
+      <h4>Radar / Imagery</h4>
+      <label class="ly-row"><input type="radio" name="ly" value="radar" checked> Radar mosaic</label>
+      <label class="ly-row"><input type="radio" name="ly" value="satellite"> Satellite</label>
+      <h4>Atmosphere</h4>
+      <label class="ly-row"><input type="radio" name="ly" value="wind"> Wind</label>
+      <label class="ly-row"><input type="radio" name="ly" value="gust"> Gusts</label>
+      <label class="ly-row"><input type="radio" name="ly" value="temp"> Temperature</label>
+      <label class="ly-row"><input type="radio" name="ly" value="dewpoint"> Dewpoint</label>
+      <label class="ly-row"><input type="radio" name="ly" value="rh"> Humidity</label>
+      <label class="ly-row"><input type="radio" name="ly" value="pressure"> Pressure</label>
+      <h4>Precip / Convection</h4>
+      <label class="ly-row"><input type="radio" name="ly" value="rain"> Rain</label>
+      <label class="ly-row"><input type="radio" name="ly" value="snow"> Snow</label>
+      <label class="ly-row"><input type="radio" name="ly" value="thunder"> Thunderstorms</label>
+      <label class="ly-row"><input type="radio" name="ly" value="cape"> CAPE</label>
+      <h4>Clouds / Other</h4>
+      <label class="ly-row"><input type="radio" name="ly" value="clouds"> Clouds</label>
+      <label class="ly-row"><input type="radio" name="ly" value="fog"> Fog</label>
+      <label class="ly-row"><input type="radio" name="ly" value="airquality"> Air quality</label>
+    </div>
+  </div>
+  <div class="time-strip"><span class="t-lab" id="t-lab">LIVE</span><div class="time-track"><div class="time-fill" id="time-fill"></div></div></div>
+</section>
+<aside class="rail right">
+  <div class="right-hd">Forecast · Models</div>
+  <div class="rail-body">
+    <div class="model-panel">
+      <h3>Guidance · SE-PA</h3>
+      <div class="model-grid">
+        <div class="model-cell" onclick="openModels()"><div class="m-name">BLEND</div><div class="m-val" id="mg-blend">—</div></div>
+        <div class="model-cell" onclick="openModels()"><div class="m-name">HRRR</div><div class="m-val" id="mg-hrrr">—</div></div>
+        <div class="model-cell" onclick="openModels()"><div class="m-name">GFS</div><div class="m-val" id="mg-gfs">—</div></div>
+        <div class="model-cell" onclick="openModels()"><div class="m-name">REFS</div><div class="m-val" id="mg-refs">INFO</div></div>
+      </div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:6px;line-height:1.35">HRRR via Open-Meteo when available. REFS ensemble on NOMADS/AWS.</div>
+    </div>
+    <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">7-Day</div><table class="fc-table" id="fc-daily"><thead><tr><th>Day</th><th>Hi</th><th>Lo</th><th>PoP</th></tr></thead><tbody></tbody></table></div>
+    <div class="card" style="cursor:default">
+      <div class="card-title" style="margin-bottom:4px">Temperature</div><div class="spark" onclick="openDayDetail(0)"><canvas id="c-temp" height="40"></canvas></div>
+      <div class="card-title" style="margin-bottom:4px">Precip chance</div><div class="spark" onclick="openDayDetail(0)"><canvas id="c-pop" height="40"></canvas></div>
+      <div class="card-title" style="margin-bottom:4px">Wind</div><div class="spark" onclick="openDayDetail(0)"><canvas id="c-wind" height="40"></canvas></div>
+    </div>
+    <div class="card" onclick="openAQI()"><div class="card-hd"><span class="card-title">Air Quality</span><span class="card-sub" id="aqi-cat">—</span></div><div class="card-val" id="aqi-val">—</div><div class="card-sub">US AQI</div></div>
+    <div class="card" onclick="openTides()"><div class="card-hd"><span class="card-title">Tides 8545240</span><span class="card-sub">NOAA</span></div><div class="metric-row"><span class="k">MLLW</span><span class="v" id="tide-mllw">—</span></div><div class="metric-row"><span class="k">Air</span><span class="v" id="tide-air">—</span></div></div>
+    <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">Hydrology · USGS</div><div id="hydro-list"></div></div>
+  </div>
+</aside>
 </div>
-
+<footer class="foot">
+  <div class="feeds"><span class="fd"><span class="d" id="d-nws"></span>NWS</span><span class="fd"><span class="d" id="d-om"></span>OM</span><span class="fd"><span class="d" id="d-aqi"></span>AQ</span><span class="fd"><span class="d" id="d-hydro"></span>USGS</span><span class="fd"><span class="d" id="d-tides"></span>TIDES</span></div>
+  <div>PHI CWA · HRRR · REFS · NWS</div>
+  <div>WEATHERXPLR DISPATCH · 120s</div>
+</footer>
+</div>
+<div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"><div class="modal-hd"><span id="modal-title">Detail</span><span class="modal-x" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></span></div><div class="modal-bd" id="modal-body"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="app.js"></script>
 </body>

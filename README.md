@@ -1,19 +1,18 @@
-# WEATHERXPLR · SE-PA Mission Display
+# WEATHERXPLR · SE-PA Dispatch
 
-Dense, always-on weather operations display for Southeastern Pennsylvania.
-Styled after **NWSXPLR** (boot screen, arc gauges, IBM Plex, severity borders).
+Dense mission-dispatch weather board for Southeastern Pennsylvania, redesigned in the spirit of **The Weather Company Maverick Dispatch**: map-first layout, layer panel, severity alerts, circular gauges, forecast tables, and sparkline charts.
 
-**Stack:** NWS · Open-Meteo (weather + AQ) · SPC · USGS · NOAA Tides · Windy  
-**Cycle:** 120 s full refresh  
-**Focus:** 40.0759°N, 75.2996°W · ZIP 19428 · PHI CWA  
+**Stack:** NWS · Open-Meteo (blend + HRRR/GFS when available) · SPC · USGS · NOAA Tides · Windy  
+**Models:** HRRR guidance labels · REFS/RRFS info links to NOMADS & AWS NODD  
+**Cycle:** 120 s · **Focus:** 40.0759°N, 75.2996°W · PHI CWA  
 
-## Features
-- NWSXPLR-style animated boot / startup screen
-- Arc gauges (temp, humidity, pressure) + wind compass
-- Minimal scrolling — dense layout for quad-box / multi-monitor
-- All tiles clickable → floating modals for full data / alerts / AFD / hydrographs
-- Alerts: NWS PA + NJ + DE, SPC Day-1 (in-app graphic), tiered tones
-- Single Windy radar/model array with layer selector
+## UI
+- Top nav: Map / Alerts / Models  
+- Left rail: Conditions (gauges) · Alerts · Surface obs  
+- Center: Windy radar/model map, layer popover, time strip  
+- Right: Model guidance cards, 7-day table, temp/PoP/wind sparks, AQI, tides, hydro  
+
+All tiles open floating modals. Alert tones optional (localStorage).
 
 ## Deploy
 Static GitHub Pages — push `index.html`, `app.js`, `README.md`.
