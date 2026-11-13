@@ -72,7 +72,7 @@
 .layer-pop{position:absolute;right:52px;top:10px;width:220px;max-height:70%;overflow-y:auto;z-index:6;background:rgba(18,21,28,.96);border:1px solid var(--line-b);border-radius:8px;padding:8px;display:none}
 .layer-pop.open{display:block}.layer-pop h4{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin:8px 0 4px}.layer-pop h4:first-child{margin-top:0}
 .ly-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:11px}.ly-row:hover{background:var(--raise2)}.ly-row input{accent-color:var(--cyan)}
-.model-bar{position:absolute;left:10px;top:10px;z-index:5;display:flex;gap:4px;flex-wrap:wrap}
+.model-bar{position:absolute;left:10px;top:10px;right:56px;z-index:5;display:flex;gap:4px;flex-wrap:wrap;pointer-events:none}.model-bar .model-chip{pointer-events:auto}
 .model-chip{padding:4px 10px;border-radius:4px;border:1px solid var(--line-b);background:rgba(18,21,28,.94);font-family:var(--font-mono);font-size:10px;color:var(--text-mid);cursor:pointer}
 .model-chip.on{background:var(--cyan);color:#0a0c10;border-color:var(--cyan);font-weight:600}
 .time-strip{height:36px;background:var(--panel);border-top:1px solid var(--line);display:flex;align-items:center;padding:0 12px;gap:10px;flex-shrink:0}
@@ -205,27 +205,15 @@
         <button type="button" class="map-btn" id="btn-home" title="Home"><i class="fa-solid fa-crosshairs"></i></button>
               </div>
       <div class="layer-pop" id="layer-pop">
-        <h4>Radar / Imagery</h4>
-        <label class="ly-row"><input type="radio" name="ly" value="radar" checked> Radar mosaic</label>
-        <label class="ly-row"><input type="radio" name="ly" value="satellite"> Satellite</label>
-        <h4>Atmosphere</h4>
-        <label class="ly-row"><input type="radio" name="ly" value="wind"> Wind</label>
-        <label class="ly-row"><input type="radio" name="ly" value="gust"> Gusts</label>
-        <label class="ly-row"><input type="radio" name="ly" value="temp"> Temperature</label>
-        <label class="ly-row"><input type="radio" name="ly" value="dewpoint"> Dewpoint</label>
-        <label class="ly-row"><input type="radio" name="ly" value="rh"> Humidity</label>
-        <label class="ly-row"><input type="radio" name="ly" value="pressure"> Pressure</label>
-        <h4>Precip / Convection</h4>
-        <label class="ly-row"><input type="radio" name="ly" value="rain"> Rain</label>
-        <label class="ly-row"><input type="radio" name="ly" value="snow"> Snow</label>
-        <label class="ly-row"><input type="radio" name="ly" value="thunder"> Thunderstorms</label>
-        <label class="ly-row"><input type="radio" name="ly" value="cape"> CAPE</label>
-        <h4>Clouds / Other</h4>
-        <label class="ly-row"><input type="radio" name="ly" value="clouds"> Clouds</label>
-        <label class="ly-row"><input type="radio" name="ly" value="fog"> Fog</label>
-        <label class="ly-row"><input type="radio" name="ly" value="airquality"> Air quality</label>
+        <h4>NEXRAD / Imagery</h4>
+        <label class="ly-row"><input type="checkbox" id="ly-radar" checked> Reflectivity</label>
+        <label class="ly-row"><input type="checkbox" id="ly-velocity"> Base Velocity</label>
+        <label class="ly-row"><input type="checkbox" id="ly-sat"> GOES IR</label>
+        <label class="ly-row"><input type="checkbox" id="ly-qpe"> QPE 1h</label>
+        <h4>Sample</h4>
+        <div style="font-size:10px;color:var(--text-dim);padding:4px 6px;line-height:1.35">Click map to set Storm 3D sample point.</div>
       </div>
-    </div>
+      </div>
     <aside class="s3d-pane" id="s3d-pane">
       <div class="s3d-pane-hd">
         <h3>Storm 3D</h3>
@@ -325,6 +313,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261112b"></script>
+<script src="app.js?v=20261112c"></script>
 </body>
 </html>

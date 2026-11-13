@@ -67,6 +67,7 @@ function tone(f,t0,dur,type,peak){const c=ctx(),o=c.createOscillator(),g=c.creat
 function playExtreme(){const n=ctx().currentTime;[880,660,880,660].forEach((f,i)=>tone(f,n+i*.14,.13,"sawtooth",.18))}
 function playSevere(){const n=ctx().currentTime;tone(523,n,.3,"sine",.16);tone(784,n+.28,.35,"sine",.16)}
 function playAdvisory(){const n=ctx().currentTime;tone(440,n,.1,"triangle",.14);tone(440,n+.16,.1,"triangle",.14)}
+function playTone(sev){const s=(sev||"").toLowerCase();if(s==="extreme")playExtreme();else if(s==="severe")playSevere();else playAdvisory();}
 const TONES={extreme:playExtreme,severe:playSevere,moderate:playSevere,minor:playAdvisory,unknown:playAdvisory};
 function playSevs(set){let d=0;["extreme","severe","moderate","minor","unknown"].forEach(s=>{if(!set.has(s))return;setTimeout(()=>TONES[s](),d);d+=900})}
 function initAudio(){try{audioOn=localStorage.getItem("wx_tones")==="1"}catch(e){}syncAudio();$("btn-audio").onclick=()=>{audioOn=!audioOn;try{localStorage.setItem("wx_tones",audioOn?"1":"0")}catch(e){}if(audioOn){ctx();playAdvisory()}syncAudio()}}
@@ -149,32 +150,65 @@ function renderSparks(){
   sparkChart("c-temp",labels,temps,"#f5a623","°F");sparkChart("c-pop",labels,pops,"#3b9eff","%");sparkChart("c-wind",labels,winds,"#06b6d4","mph");
 }
 
+
+async function fetchOpenMeteo(){
+  try{
+    const u=`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`+
+      `&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m`+
+      `&hourly=temperature_2m,precipitation_probability,wind_speed_10m`+
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max`+
+      `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York&forecast_days=7`;
+    const r=await fetchT(u,{},15000);
+    if(!r.ok) throw new Error("OM HTTP "+r.status);
+    omData=await r.json();
+    setFeed("om",true);
+    renderConditions();
+    renderForecast();
+    renderSparks();
+    renderModelCards();
+  }catch(e){
+    console.warn("Open-Meteo",e);
+    setFeed("om",false);
+  }
+}
+
 async function fetchAlerts(){
   try{
+    const headers={Accept:"application/geo+json,application/json","User-Agent":"WeatherXplr/2.0 (github.com/jasonsaro-ops)"};
     const urls=["https://api.weather.gov/alerts/active?area=PA","https://api.weather.gov/alerts/active?area=NJ","https://api.weather.gov/alerts/active?area=DE"];
-    const results=await Promise.all(urls.map(u=>fetch(u).then(r=>r.json()).catch(()=>({features:[]}))));
-    const seen=new Set(),feats=[];
-    results.forEach(data=>(data.features||[]).forEach(f=>{const id=f.properties&&f.properties.id;if(id&&!seen.has(id)){seen.add(id);feats.push(f)}}));
-    let spcNote=null;
-    try{
-      const spc=await fetch("https://www.spc.noaa.gov/products/outlook/day1otlk_cat.nolyr.geojson").then(r=>r.json());
-      const labels=(spc.features||[]).map(f=>(f.properties&&(f.properties.LABEL||f.properties.label))||"").filter(Boolean);
-      const uniq=[...new Set(labels)];
-      spcNote=uniq.length?"SPC Day-1: "+uniq.join(", "):"SPC Day-1: no categorical risk";
-      window.__spcNote=spcNote;window.__spcDetail={labels:uniq,counts:{}};
-      uniq.forEach(l=>{window.__spcDetail.counts[l]=labels.filter(x=>x===l).length});
-    }catch(e){}
-    feats.sort((a,b)=>{const o={extreme:0,severe:1,moderate:2,minor:3};return(o[(a.properties.severity||"").toLowerCase()]??4)-(o[(b.properties.severity||"").toLowerCase()]??4)});
-    alertCache={};const ids=new Set(),newSevs=new Set();let html="";
-    if(spcNote)html+=`<div class="alert-item sev-moderate" onclick="openSPC()"><div class="alert-ev" style="color:var(--amber)">SPC Convective Outlook</div><div class="alert-meta">${esc(spcNote)}</div></div>`;
-    if(!feats.length)html+=`<div class="empty"><i class="fa-solid fa-check"></i> Clear — no active NWS alerts (PA/NJ/DE)</div>`;
-    else feats.forEach(f=>{const p=f.properties;alertCache[p.id]=p;ids.add(p.id);const sk=sevKey(p.severity);if(hasBaseline&&!prevAlertIds.has(p.id))newSevs.add(sk);
-      const sender=(p.senderName||"").replace("NWS ","");
-      html+=`<div class="alert-item ${sevClass(p.severity)}" onclick="openAlert('${p.id}')"><div class="alert-ev">${esc(p.event)}</div><div class="alert-meta">${esc(p.severity||"—")} · ${esc(sender)} · ${esc((p.areaDesc||"").substring(0,50))}</div></div>`});
-    if(hasBaseline&&newSevs.size&&audioOn)playSevs(newSevs);if(!hasBaseline)hasBaseline=true;prevAlertIds=ids;
-    $("alerts-list").innerHTML=html;$("chip-alerts").textContent="ALERTS "+feats.length;$("chip-alerts").classList.toggle("alert",feats.length>0);
+    const results=await Promise.all(urls.map(u=>fetchT(u,{headers},12000).then(r=>r.json()).catch(()=>({features:[]}))));
+    const seen=new Set(); const all=[];
+    results.forEach(j=>(j.features||[]).forEach(f=>{
+      const id=f.id||f.properties?.id; if(id&&seen.has(id))return; if(id)seen.add(id); all.push(f);
+    }));
+    const sevRank={extreme:0,severe:1,moderate:2,minor:3,unknown:4};
+    all.sort((a,b)=>(sevRank[sevKey(a.properties?.severity)]??4)-(sevRank[sevKey(b.properties?.severity)]??4));
+    alertCache={features:all};
+    all.forEach(f=>{ if(f.id) alertCache[f.id]=f.properties||{}; });
+    const n=all.length;
+    $("chip-alerts").textContent="ALERTS "+n;
+    $("chip-alerts").classList.toggle("hot",n>0);
+    const list=$("alerts-list");
+    if(list){
+      if(!all.length) list.innerHTML='<span class="err" style="color:var(--text-dim)">No active alerts (PA/NJ/DE)</span>';
+      else list.innerHTML=all.slice(0,40).map(f=>{
+        const p=f.properties||{};
+        return `<div class="alert-row ${sevClass(p.severity)}" onclick='openAlert(${JSON.stringify(String(f.id||"")).replace(/'/g,"")})'><div class="ev">${esc(p.event||"Alert")}</div><div class="hd">${esc(p.headline||p.areaDesc||"")}</div></div>`;
+      }).join("");
+    }
+    // audio for new severe
+    const ids=new Set(all.map(f=>f.id));
+    if(hasBaseline&&audioOn){
+      all.forEach(f=>{
+        if(!prevAlertIds.has(f.id)){
+          const s=sevKey(f.properties?.severity);
+          if(s==="extreme"||s==="severe") try{playTone(s)}catch(e){}
+        }
+      });
+    }
+    prevAlertIds=ids; hasBaseline=true;
     setFeed("nws",true);
-  }catch(e){setFeed("nws",false);$("alerts-list").innerHTML=`<span class="err">Alert feed down</span>`}
+  }catch(e){console.warn(e);setFeed("nws",false);if($("alerts-list"))$("alerts-list").innerHTML=`<span class="err">Alert feed down</span>`}
 }
 window.openSPC=function(){
   const note=window.__spcNote||"SPC Day-1";const d=window.__spcDetail||{labels:[],counts:{}};
@@ -191,25 +225,44 @@ window.openSPC=function(){
   <button class="btn" style="width:100%" onclick="window.open('https://www.spc.noaa.gov/products/outlook/day1otlk.html','_blank')">Full SPC product ↗</button>`,"moderate");
 };
 window.__spcFb=function(img){const urls=window.__spcImgUrls||[];let i=parseInt(img.getAttribute("data-idx")||"0",10)+1;if(i<urls.length){img.setAttribute("data-idx",String(i));img.src=urls[i]}else img.style.display="none"};
-window.openAlert=function(id){const a=alertCache[id];if(!a)return;
+window.openAlert=function(id){
+  const feats=alertCache.features||[];
+  let a=alertCache[id];
+  if(!a){const f=feats.find(x=>x.id===id); a=f&&(f.properties||f)}
+  if(!a){openModal("Alert","<span class='err'>Not found</span>");return;}
   let body=`<div style="color:var(--red);font-weight:700;margin-bottom:6px">${esc(a.headline||a.event)}</div>
   <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px">${esc(a.severity||"—")} · ${esc(a.urgency||"—")} · ${esc(a.certainty||"—")}</div>
   <div style="margin-bottom:8px"><b>Area:</b> ${esc(a.areaDesc||"")}</div>
   <div style="background:var(--bg);padding:10px;border:1px solid var(--line);white-space:pre-wrap;font-size:12px;font-family:var(--font-mono)">${esc(a.description||"")}</div>`;
   if(a.instruction)body+=`<div style="margin-top:10px;color:var(--amber);font-weight:600;font-size:11px">ACTIONS</div><div style="background:var(--bg);padding:10px;border:1px solid var(--line);white-space:pre-wrap;font-size:12px;color:var(--cyan);font-family:var(--font-mono)">${esc(a.instruction)}</div>`;
-  openModal("NWS Alert",body,a.severity)};
+  openModal("NWS Alert",body,a.severity);
+};
 
 async function fetchObs(){
   try{
-    const pts=await fetch(`https://api.weather.gov/points/${LAT},${LON}`).then(r=>r.json());
-    const st=await fetch(pts.properties.observationStations).then(r=>r.json());
-    const stations=(st.features||[]).slice(0,5);
-    const results=await Promise.all(stations.map(s=>fetch(`https://api.weather.gov/stations/${s.properties.stationIdentifier}/observations/latest`).then(r=>r.json()).then(obs=>({id:s.properties.stationIdentifier,name:s.properties.name,obs})).catch(()=>null)));
-    obsCache={};let html="";
-    results.filter(Boolean).forEach(item=>{const p=item.obs.properties||{};const tC=p.temperature&&p.temperature.value;const tF=tC!=null?Math.round(tC*9/5+32):"—";
-      obsCache[item.id]=p;html+=`<div class="obs-row" onclick="openObs('${item.id}')"><div><div class="id">${esc(item.id)}</div><div class="nm">${esc((item.name||"").substring(0,28))}</div></div><div class="tv">${tF}°F</div></div>`});
-    $("obs-list").innerHTML=html||`<span class="err">No obs</span>`;
-  }catch(e){$("obs-list").innerHTML=`<span class="err">Obs timeout</span>`}
+    const headers={Accept:"application/geo+json,application/ld+json","User-Agent":"WeatherXplr/2.0 (github.com/jasonsaro-ops)"};
+    const pts=await fetchT(`https://api.weather.gov/points/${LAT},${LON}`,{headers},12000).then(r=>r.json());
+    const stUrl=pts.properties&&pts.properties.observationStations;
+    if(!stUrl) throw new Error("no stations");
+    const st=await fetchT(stUrl,{headers},12000).then(r=>r.json());
+    const stations=(st.features||[]).slice(0,8);
+    const results=await Promise.all(stations.map(s=>{
+      const id=s.properties.stationIdentifier;
+      return fetchT(`https://api.weather.gov/stations/${id}/observations/latest`,{headers},10000)
+        .then(r=>r.json()).then(obs=>({id,name:s.properties.name,obs})).catch(()=>null);
+    }));
+    obsCache=results.filter(Boolean);
+    const box=$("obs-list");
+    if(box){
+      box.innerHTML=obsCache.map(o=>{
+        const p=o.obs.properties||{};
+        const tC=p.temperature&&p.temperature.value;
+        const tF=tC!=null?Math.round(tC*9/5+32):"—";
+        return `<div class="obs-row"><div><div class="id">${esc(o.id)}</div><div class="nm">${esc(o.name||"")}</div></div><div class="tv">${tF}°</div></div>`;
+      }).join("")||'<span class="err">No obs</span>';
+    }
+    setFeed("nws",true);
+  }catch(e){console.warn("obs",e);setFeed("nws",false)}
 }
 window.openObs=function(id){const p=obsCache[id];if(!p)return;
   const tF=p.temperature&&p.temperature.value!=null?((p.temperature.value*9/5)+32).toFixed(1):"—";
@@ -219,12 +272,19 @@ window.openObs=function(id){const p=obsCache[id];if(!p)return;
 
 async function fetchAQI(){
   try{
-    const data=await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LON}&current=us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide&timezone=America%2FNew_York`).then(r=>r.json());
-    setFeed("aqi",true);const c=data.current||{};aqiCache={current:c};
-    const aqi=c.us_aqi;let cat="—",col="#6b7a90";
-    if(aqi!=null){if(aqi<=50){cat="Good";col="#2ecc71"}else if(aqi<=100){cat="Moderate";col="#eab308"}else if(aqi<=150){cat="USG";col="#f97316"}else{cat="Unhealthy";col="#ef4444"}}
-    $("aqi-val").innerHTML=`<span style="color:${col}">${aqi??"—"}</span>`;$("aqi-cat").textContent=cat;$("aqi-cat").style.color=col;
-  }catch(e){setFeed("aqi",false)}
+    const data=await fetchT(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LON}&current=us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide&timezone=America%2FNew_York`,{},12000).then(r=>r.json());
+    setFeed("aqi",true);
+    const c=data.current||{};
+    aqiCache={current:c};
+    const aqi=c.us_aqi;
+    $("aqi-val").textContent=aqi!=null?aqi:"—";
+    let cat="—";
+    if(aqi!=null){
+      if(aqi<=50)cat="Good"; else if(aqi<=100)cat="Moderate"; else if(aqi<=150)cat="USG"; else if(aqi<=200)cat="Unhealthy"; else cat="Very Unhealthy";
+    }
+    $("aqi-cat").textContent=cat;
+    $("aqi-cat").style.color=aqi!=null&&aqi>100?"var(--red)":aqi>50?"var(--amber)":"var(--green)";
+  }catch(e){console.warn("AQI",e);setFeed("aqi",false)}
 }
 window.openAQI=function(){const c=aqiCache.current;if(!c)return;
   openModal(`Air Quality · US AQI ${c.us_aqi??"—"}`,`<div class="metric-row"><span class="k">US AQI</span><span class="v">${c.us_aqi??"—"}</span></div>
@@ -237,24 +297,40 @@ function fetchHydro(){setFeed("hydro",true);$("hydro-list").innerHTML=GAUGES.map
 window.openHydro=function(id,name){openModal(`USGS · ${name}`,`<div style="height:400px"><iframe src="https://dashboard.waterdata.usgs.gov/api/gwis/2.1/service/site?agencyCode=USGS&siteNumber=${id}&open=plots&banner=false&pad=false" style="width:100%;height:100%;border:none;background:#fff;border-radius:4px"></iframe></div>`)};
 
 async function fetchTides(){
-  const st="8545240",base=`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${st}&time_zone=lst_ldt&units=english&format=json&date=today`;
   try{
-    const[wl,air]=await Promise.all([fetch(`${base}&product=water_level&datum=MLLW`).then(r=>r.json()),fetch(`${base}&product=air_temperature`).then(r=>r.json())]);
-    setFeed("tides",true);const last=wl.data&&wl.data[wl.data.length-1];const la=air.data&&air.data[air.data.length-1];
-    $("tide-mllw").textContent=last?last.v+" ft":"—";$("tide-air").textContent=la?la.v+"°F":"—";
+    const station="8545240";
+    const [wl,air]=await Promise.all([
+      fetchT(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?date=latest&station=${station}&product=water_level&datum=MLLW&units=english&time_zone=lst_ldt&format=json`,{},12000).then(r=>r.json()),
+      fetchT(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?date=latest&station=${station}&product=air_temperature&units=english&time_zone=lst_ldt&format=json`,{},12000).then(r=>r.json()),
+    ]);
+    setFeed("tides",true);
+    const last=wl.data&&wl.data[wl.data.length-1];
+    const la=air.data&&air.data[air.data.length-1];
+    $("tide-mllw").textContent=last?last.v+" ft":"—";
+    $("tide-air").textContent=la?la.v+"°F":"—";
     window.__tide={last,la,wl};
-  }catch(e){setFeed("tides",false)}
+  }catch(e){console.warn("tides",e);setFeed("tides",false)}
 }
 window.openTides=function(){const t=window.__tide||{};openModal("Tides · 8545240",`<div class="metric-row"><span class="k">MLLW</span><span class="v">${t.last?t.last.v+" ft":"—"}</span></div><div class="metric-row"><span class="k">Air</span><span class="v">${t.la?t.la.v+"°F":"—"}</span></div><div style="margin-top:8px;font-size:11px;color:var(--text-dim)">NOAA CO-OPS · Delaware River</div>`)};
 
 async function fetchKPHL(){
   try{
-    const obs=await fetch("https://api.weather.gov/stations/KPHL/observations/latest").then(r=>r.json());
-    kphlObs=obs.properties||{};const p=kphlObs;const tC=p.temperature&&p.temperature.value;
+    const headers={Accept:"application/geo+json,application/ld+json","User-Agent":"WeatherXplr/2.0 (github.com/jasonsaro-ops)"};
+    const obs=await fetchT("https://api.weather.gov/stations/KPHL/observations/latest",{headers},12000).then(r=>r.json());
+    kphlObs=obs.properties||{};
+    const p=kphlObs;
+    const tC=p.temperature&&p.temperature.value;
     $("kphl-temp").innerHTML=(tC!=null?Math.round(tC*9/5+32):"—")+`<span class="card-unit">°F</span>`;
     $("kphl-desc").textContent=p.textDescription||"Philadelphia Intl";
-    try{const list=await fetch("https://api.weather.gov/products/types/AFD/locations/PHI").then(r=>r.json());const g=list["@graph"]||[];if(g.length){const prod=await fetch(g[0]["@id"]||`https://api.weather.gov/products/${g[0].id}`).then(r=>r.json());afdFull=prod.productText||""}}catch(e){}
-  }catch(e){}
+    try{
+      const list=await fetchT("https://api.weather.gov/products/types/AFD/locations/PHI",{headers},12000).then(r=>r.json());
+      const g=list["@graph"]||[];
+      if(g.length){
+        const prod=await fetchT(g[0]["@id"]||`https://api.weather.gov/products/${g[0].id}`,{headers},12000).then(r=>r.json());
+        afdFull=prod.productText||"";
+      }
+    }catch(e){}
+  }catch(e){console.warn("KPHL",e)}
 }
 window.openKPHL=function(){const p=kphlObs||{};const tF=p.temperature&&p.temperature.value!=null?((p.temperature.value*9/5)+32).toFixed(1):"—";
   openModal("KPHL · Philadelphia Intl",`<div style="font-size:28px;font-weight:700;font-family:var(--font-mono);margin-bottom:4px">${tF}°F</div>
