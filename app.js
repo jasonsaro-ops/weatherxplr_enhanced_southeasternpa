@@ -16,10 +16,29 @@ let cd=CYCLE,audioOn=false,audioCtx=null,alertCache={},obsCache={},aqiCache={},k
 let prevAlertIds=new Set(),hasBaseline=false,omData=null,charts={};
 const feed={nws:true,om:true,aqi:true,hydro:true,tides:true};
 function $(id){return document.getElementById(id)}
+function fetchT(url, opts={}, ms=12000){
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(), ms);
+  return fetch(url, {...opts, signal:ctrl.signal}).finally(()=>clearTimeout(t));
+}
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function sevClass(s){s=(s||"").toLowerCase();return ["extreme","severe","moderate","minor"].includes(s)?"sev-"+s:"sev-unknown"}
 function sevKey(s){s=(s||"").toLowerCase();return ["extreme","severe","moderate","minor"].includes(s)?s:"unknown"}
 function setFeed(id,ok){const el=$("d-"+id);if(el)el.classList.toggle("off",!ok);feed[id]=ok}
+
+function tickClock(){
+  const now = new Date();
+  const local = now.toLocaleTimeString("en-US",{hour12:false,timeZone:"America/New_York"});
+  const zulu = now.toISOString().slice(11,19);
+  const el = $("clock");
+  if(el) el.textContent = local + " L · " + zulu + "Z";
+  // optional separate elements
+  const l = $("clock-local"), z = $("clock-zulu");
+  if(l) l.textContent = local + " L";
+  if(z) z.textContent = zulu + "Z";
+}
+
+
 
 function arcGauge(value,min,max,color,label,unit,disp){
   const pct=value==null||isNaN(value)?0:Math.max(0,Math.min(1,(value-min)/(max-min)));
@@ -265,10 +284,16 @@ window.openModels=function(){
 };
 
 async function refreshAll(){
-  await Promise.all([fetchOpenMeteo(),fetchAlerts(),fetchObs(),fetchAQI(),fetchTides(),fetchKPHL()]);
-  fetchHydro();
-  if(typeof refreshStorm3DPane==="function") refreshStorm3DPane();
-  $("chip-sync").textContent="SYNC "+new Date().toLocaleTimeString("en-US",{hour12:false});
+  await Promise.allSettled([
+    fetchOpenMeteo().catch(e=>console.warn(e)),
+    fetchAlerts().catch(e=>console.warn(e)),
+    fetchObs().catch(e=>console.warn(e)),
+    fetchAQI().catch(e=>console.warn(e)),
+    fetchTides().catch(e=>console.warn(e)),
+    fetchKPHL().catch(e=>console.warn(e)),
+  ]);
+  try{ fetchHydro(); }catch(e){}
+  $("chip-sync") && ($("chip-sync").textContent="SYNC "+new Date().toLocaleTimeString("en-US",{hour12:false}));
 }
 
 /* ========== Leaflet + Mesonet NEXRAD (clickable) ========== */
@@ -383,12 +408,31 @@ async function boot(){
   const bar=$("boot-prog"),st=$("boot-st");
   const steps=[[15,"CONNECTING NWS…"],[35,"OPEN-METEO · HRRR…"],[55,"ALERTS · SPC…"],[75,"OBS · AQ · TIDES…"],[90,"RADAR ARRAY…"],[100,"DISPATCH ONLINE"]];
   let i=0;const t=setInterval(()=>{if(i<steps.length){bar.style.width=steps[i][0]+"%";st.textContent=steps[i][1];i++}},280);
-  initRadar();initAudio();tickClock();setInterval(tickClock,1000);
-  await refreshAll();
-  initStorm3DControls();
-  setTimeout(()=>refreshStorm3DPane(), 400);clearInterval(t);bar.style.width="100%";st.textContent="ONLINE";
-  setTimeout(()=>{$("boot").classList.add("out");$("app").classList.add("on");setTimeout(()=>$("boot")?.remove(),600)},350);
-  setInterval(()=>{cd--;if(cd<=0){cd=CYCLE;refreshAll()}$("cd").textContent=cd},1000);
+  const dismiss=()=>{
+    clearInterval(t);
+    if(bar) bar.style.width="100%";
+    if(st) st.textContent="ONLINE";
+    $("boot")?.classList.add("out");
+    $("app")?.classList.add("on");
+    setTimeout(()=>$("boot")?.remove(),600);
+  };
+  try{
+    initRadar();
+  }catch(e){ console.error("initRadar", e); }
+  try{ initAudio(); }catch(e){}
+  tickClock(); setInterval(tickClock,1000);
+  try{
+    await Promise.race([
+      refreshAll(),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error("boot timeout")), 15000))
+    ]);
+  }catch(e){ console.warn("refreshAll boot", e); }
+  try{ initStorm3DControls(); }catch(e){ console.error(e); }
+  setTimeout(()=>{ try{ refreshStorm3DPane(); }catch(e){} }, 500);
+  dismiss();
+  setInterval(()=>{cd--;if(cd<=0){cd=CYCLE;refreshAll().catch(()=>{})}$("cd").textContent=cd},1000);
+  // Leaflet needs size after app visible
+  setTimeout(()=>{ try{ wxMap && wxMap.invalidateSize(true); }catch(e){} }, 700);
 }
 document.addEventListener("DOMContentLoaded",boot);
 
