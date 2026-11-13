@@ -420,7 +420,7 @@ async function boot(){
     initRadar();
   }catch(e){ console.error("initRadar", e); }
   try{ initAudio(); }catch(e){}
-  tickClock(); setInterval(tickClock,1000);
+  try{ if(typeof tickClock==='function'){ tickClock(); setInterval(tickClock,1000);} }catch(e){console.warn(e);}
   try{
     await Promise.race([
       refreshAll(),
