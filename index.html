@@ -80,7 +80,7 @@
 .fc-table th{text-align:left;padding:4px 3px;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--line)}
 .fc-table td{padding:4px 3px;border-bottom:1px solid var(--line);font-family:var(--font-mono)}.fc-table tr{cursor:pointer}.fc-table tr:hover td{background:var(--raise2)}
 .hi{color:var(--orange)}.lo{color:var(--cyan2)}
-.spark{height:48px;margin:4px 0 8px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px;cursor:pointer}.spark:hover{border-color:var(--cyan)}
+.spark{height:48px;margin:4px 0 8px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px;cursor:pointer}.spark:hover{border-color:var(--cyan)}.spark.tall{height:80px}
 .model-panel{background:var(--raise);border:1px solid var(--line);border-radius:var(--r);padding:8px;margin-bottom:8px}
 .model-panel h3{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
 .model-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
@@ -129,7 +129,7 @@
 .s3d-view{flex:1;position:relative;min-height:140px;background:#05070c}
 .s3d-view #s3d-canvas{width:100%;height:100%;display:block}
 .sample-overlay{display:none;position:absolute;inset:0;z-index:8;cursor:crosshair;background:rgba(59,158,255,.06)}
-.sample-overlay.on{display:block}
+.sample-overlay.on{display:block;background:rgba(59,158,255,.12);border:1px dashed var(--cyan)}
 .sample-pin{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border:2px solid #fff;background:var(--cyan);border-radius:50%;box-shadow:0 0 8px var(--cyan);pointer-events:none;display:none;z-index:9}
 .sample-hint{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(18,21,28,.95);border:1px solid var(--cyan);color:var(--cyan);padding:4px 10px;border-radius:4px;font-family:var(--font-mono);font-size:10px;z-index:10;display:none}
 .sample-hint.on{display:block}
@@ -165,6 +165,7 @@
         <div class="metric-row"><span class="k">Precip</span><span class="v" id="m-precip">—</span></div>
       </div>
       <div class="card" onclick="openKPHL()"><div class="card-hd"><span class="card-title">KPHL</span><span class="card-sub">NWS</span></div><div class="card-val" id="kphl-temp">—<span class="card-unit">°F</span></div><div class="card-sub" id="kphl-desc">Philadelphia Intl</div></div>
+      <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">Hydrology · USGS</div><div id="hydro-list"></div></div>
     </div>
     <div class="pane" id="pane-alerts"><div id="alerts-list"></div></div>
     <div class="pane" id="pane-obs"><div id="obs-list"></div></div>
@@ -222,7 +223,7 @@
           <button type="button" id="btn-s3d-refresh" title="Refresh volume"><i class="fa-solid fa-rotate"></i></button>
         </div>
       </div>
-      <div class="s3d-loc" id="s3d-loc">40.0759°N 75.2996°W</div>
+      <div class="s3d-loc" id="s3d-loc">40.0759°N 75.2996°W · map center</div>
       <div class="s3d-pane-body">
         <div class="s3d-metrics" id="s3d-metrics">
           <div class="row"><span class="k">Mode</span><span class="v" id="s3d-mode">—</span></div>
@@ -254,13 +255,15 @@
     </div>
     <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">7-Day</div><table class="fc-table" id="fc-daily"><thead><tr><th>Day</th><th>Hi</th><th>Lo</th><th>PoP</th></tr></thead><tbody></tbody></table></div>
     <div class="card" style="cursor:default">
-      <div class="card-title" style="margin-bottom:4px">Temperature</div><div class="spark" onclick="openDayDetail(0)"><canvas id="c-temp" height="40"></canvas></div>
-      <div class="card-title" style="margin-bottom:4px">Precip chance</div><div class="spark" onclick="openDayDetail(0)"><canvas id="c-pop" height="40"></canvas></div>
-      <div class="card-title" style="margin-bottom:4px">Wind</div><div class="spark" onclick="openDayDetail(0)"><canvas id="c-wind" height="40"></canvas></div>
+      <div class="card-title" style="margin-bottom:2px">Temperature °F</div>
+      <div class="spark tall" onclick="openDayDetail(0)"><canvas id="c-temp" height="72"></canvas></div>
+      <div class="card-title" style="margin-bottom:2px">Precip chance %</div>
+      <div class="spark tall" onclick="openDayDetail(0)"><canvas id="c-pop" height="72"></canvas></div>
+      <div class="card-title" style="margin-bottom:2px">Wind mph</div>
+      <div class="spark tall" onclick="openDayDetail(0)"><canvas id="c-wind" height="72"></canvas></div>
     </div>
     <div class="card" onclick="openAQI()"><div class="card-hd"><span class="card-title">Air Quality</span><span class="card-sub" id="aqi-cat">—</span></div><div class="card-val" id="aqi-val">—</div><div class="card-sub">US AQI</div></div>
     <div class="card" onclick="openTides()"><div class="card-hd"><span class="card-title">Tides 8545240</span><span class="card-sub">NOAA</span></div><div class="metric-row"><span class="k">MLLW</span><span class="v" id="tide-mllw">—</span></div><div class="metric-row"><span class="k">Air</span><span class="v" id="tide-air">—</span></div></div>
-    <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">Hydrology · USGS</div><div id="hydro-list"></div></div>
   </div>
 </aside>
 </div>

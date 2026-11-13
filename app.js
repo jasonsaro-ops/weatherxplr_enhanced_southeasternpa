@@ -114,12 +114,27 @@ window.openDayDetail=function(i){if(!omData||!omData.daily)return;const d=omData
   <div class="metric-row"><span class="k">Wind max</span><span class="v">${Math.round(d.wind_speed_10m_max[i])} mph</span></div>
   <div class="metric-row"><span class="k">Sky</span><span class="v">${esc(WMO[d.weather_code[i]]||"—")}</span></div>`)}
 
-function sparkChart(id,labels,data,color){
+function sparkChart(id,labels,data,color,yLabel){
   const canvas=$(id);if(!canvas)return;
   if(charts[id])charts[id].destroy();
   Chart.defaults.color="#6b7a90";Chart.defaults.font.family="IBM Plex Mono";Chart.defaults.font.size=9;
-  charts[id]=new Chart(canvas,{type:"line",data:{labels,datasets:[{data,borderColor:color,borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:color+"22",tension:.35}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false,beginAtZero:false}}}});
+  const nums=(data||[]).filter(v=>v!=null&&!isNaN(v));
+  const ymin=nums.length?Math.floor(Math.min(...nums)):0;
+  const ymax=nums.length?Math.ceil(Math.max(...nums)):1;
+  // sparse x labels: every ~6 hours among hourly labels
+  const xLabels=labels.map((h,i)=> (i%6===0 ? (String(h).padStart?String(h).padStart(2,"0"):h)+":00" : ""));
+  charts[id]=new Chart(canvas,{
+    type:"line",
+    data:{labels:xLabels,datasets:[{data,borderColor:color,borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:color+"22",tension:.35}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.parsed.y}${yLabel?(" "+yLabel):""}`}}},
+      scales:{
+        x:{display:true,ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:6,color:"#6b7a90",font:{size:8}},grid:{color:"rgba(42,49,64,.5)"}},
+        y:{display:true,min:ymin,max:ymax===ymin?ymax+1:ymax,ticks:{maxTicksLimit:4,color:"#6b7a90",font:{size:8},callback:v=>v+(yLabel?"":"")},grid:{color:"rgba(42,49,64,.45)"}}
+      }
+    }
+  });
 }
 function renderSparks(){
   if(!omData||!omData.hourly)return;
@@ -129,7 +144,7 @@ function renderSparks(){
     const t=new Date(h.time[i]);if(t.getTime()<now-3600000)continue;
     labels.push(t.getHours());temps.push(h.temperature_2m[i]);pops.push(h.precipitation_probability[i]??0);winds.push(h.wind_speed_10m[i]);
   }
-  sparkChart("c-temp",labels,temps,"#f5a623");sparkChart("c-pop",labels,pops,"#3b9eff");sparkChart("c-wind",labels,winds,"#06b6d4");
+  sparkChart("c-temp",labels,temps,"#f5a623","°F");sparkChart("c-pop",labels,pops,"#3b9eff","%");sparkChart("c-wind",labels,winds,"#06b6d4","mph");
 }
 
 async function fetchAlerts(){
@@ -295,11 +310,11 @@ let s3d = { renderer:null, scene:null, camera:null, cloud:null, anim:null, data:
 function setSample(lat, lon, presetKey){
   sampleLat = lat; sampleLon = lon;
   const el = $("s3d-loc");
-  if(el) el.textContent = lat.toFixed(4) + "°N " + Math.abs(lon).toFixed(4) + "°W";
+  if(el) el.textContent = lat.toFixed(4) + "°N " + Math.abs(lon).toFixed(4) + "°W · map center";
   document.querySelectorAll("#btn-loc-sepa, #btn-loc-19428").forEach(b => b.classList.remove("active"));
   if(presetKey === "sepa") $("btn-loc-sepa")?.classList.add("active");
   if(presetKey === "z19428") $("btn-loc-19428")?.classList.add("active");
-  // Recenter Windy on sample
+  // Map embed recenters on sample — Storm 3D always samples this map center
   const layer = document.querySelector('input[name="ly"]:checked')?.value || "radar";
   setLayer(layer);
   refreshStorm3DPane();
@@ -409,36 +424,69 @@ function buildStormCloud(metrics){
   const core=metrics.coreTopFt||echo*0.5;
   const maxDbz=metrics.maxDbz||0;
   const maxHt=metrics.maxDbzHeightFt||core*0.4;
+  const rng=(i)=>((Math.sin(i*12.9898)*43758.5453)%1+1)%1; // deterministic pseudo-noise
 
   if(maxDbz<5||echo<1000){
-    const geo=new THREE.SphereGeometry(0.12,12,12);
-    const mat=new THREE.MeshBasicMaterial({color:0x1a9850,transparent:true,opacity:0.12});
-    const m=new THREE.Mesh(geo,mat); m.position.y=0.05; group.add(m);
+    const geo=new THREE.SphereGeometry(0.1,10,10);
+    const mat=new THREE.MeshBasicMaterial({color:0x1a9850,transparent:true,opacity:0.1});
+    const m=new THREE.Mesh(geo,mat); m.position.y=0.04; group.add(m);
     return group;
   }
 
-  const layers=14;
+  // Irregular stacked lobes with noise offsets (peaks / valleys)
+  const layers=18;
   for(let i=0;i<layers;i++){
     const t=i/(layers-1);
     const hFt=echo*t;
-    const width=0.55*Math.sin(Math.PI*Math.min(1,t*1.15))*(0.7+0.3*(maxDbz/70));
-    const y=t*2.2;
     let dbz=maxDbz*(1-Math.abs(hFt-maxHt)/Math.max(echo,1));
-    dbz=Math.max(10, dbz);
-    if(hFt>core) dbz*=0.75;
-    if(hFt>echo*0.85) dbz*=0.45;
-    const geo=new THREE.SphereGeometry(Math.max(0.08,width),16,12);
-    geo.scale(1.2, 0.55+0.2*Math.sin(t*Math.PI), 1.2);
-    const mat=new THREE.MeshBasicMaterial({color:dbzColor(dbz),transparent:true,opacity:0.18+0.35*(dbz/70),depthWrite:false});
+    dbz=Math.max(8, dbz);
+    if(hFt>core) dbz*=0.78;
+    if(hFt>echo*0.88) dbz*=0.4;
+    const baseW=0.12+0.55*Math.sin(Math.PI*Math.min(1,t*1.2))*(0.65+0.35*(maxDbz/70));
+    // noise scale for jagged outline
+    const n1=0.75+0.55*rng(i);
+    const n2=0.7+0.6*rng(i+3);
+    const n3=0.8+0.5*rng(i+7);
+    const geo=new THREE.SphereGeometry(Math.max(0.06,baseW),12,10);
+    geo.scale(n1*1.3, 0.35+0.45*rng(i+1), n2*1.25);
+    const mat=new THREE.MeshBasicMaterial({color:dbzColor(dbz),transparent:true,opacity:0.16+0.38*(dbz/70),depthWrite:false});
     const mesh=new THREE.Mesh(geo,mat);
-    mesh.position.set(Math.sin(i*1.7)*0.08, y, Math.cos(i*1.3)*0.08);
+    mesh.position.set((rng(i+11)-0.5)*0.35, t*2.2, (rng(i+13)-0.5)*0.35);
+    mesh.rotation.y=rng(i)*Math.PI;
     group.add(mesh);
   }
-  const coreGeo=new THREE.SphereGeometry(0.28*(maxDbz/60),14,12);
-  const coreMat=new THREE.MeshBasicMaterial({color:dbzColor(maxDbz),transparent:true,opacity:0.55,depthWrite:false});
-  const coreMesh=new THREE.Mesh(coreGeo,coreMat);
-  coreMesh.position.y=Math.max(0.15, (maxHt/echo)*2.2);
-  group.add(coreMesh);
+
+  // Vertical spikes (updraft towers)
+  const spikes=Math.max(3, Math.round(maxDbz/12));
+  for(let s=0;s<spikes;s++){
+    const h=0.4+1.6*rng(s+20)*(maxDbz/70);
+    const cone=new THREE.ConeGeometry(0.06+0.08*rng(s), h, 6);
+    const dbz=maxDbz*(0.7+0.3*rng(s+2));
+    const mat=new THREE.MeshBasicMaterial({color:dbzColor(dbz),transparent:true,opacity:0.45,depthWrite:false});
+    const mesh=new THREE.Mesh(cone,mat);
+    mesh.position.set((rng(s+30)-0.5)*0.5, h*0.5+0.15, (rng(s+31)-0.5)*0.5);
+    group.add(mesh);
+  }
+
+  // Dense core ellipsoids
+  for(let c=0;c<3;c++){
+    const coreGeo=new THREE.SphereGeometry(0.14+0.12*(maxDbz/70)*rng(c+40), 12, 10);
+    coreGeo.scale(1.4, 0.7, 1.1);
+    const coreMat=new THREE.MeshBasicMaterial({color:dbzColor(maxDbz*(0.85+0.15*rng(c))),transparent:true,opacity:0.5,depthWrite:false});
+    const coreMesh=new THREE.Mesh(coreGeo,coreMat);
+    coreMesh.position.set((rng(c+50)-0.5)*0.2, Math.max(0.2,(maxHt/echo)*2.2*(0.7+0.3*rng(c))), (rng(c+51)-0.5)*0.2);
+    group.add(coreMesh);
+  }
+
+  // Anvil flare near top if strong
+  if(maxDbz>=45 && echo>25000){
+    const anvil=new THREE.SphereGeometry(0.55, 14, 8);
+    anvil.scale(1.6, 0.22, 1.5);
+    const amat=new THREE.MeshBasicMaterial({color:dbzColor(maxDbz*0.55),transparent:true,opacity:0.28,depthWrite:false});
+    const am=new THREE.Mesh(anvil,amat);
+    am.position.y=2.05;
+    group.add(am);
+  }
   return group;
 }
 
@@ -525,55 +573,55 @@ window.refreshStorm3D=refreshStorm3DPane;
 // Click-to-sample: approximate lat/lon from pixel over Windy iframe (Web Mercator)
 function lonLatFromClick(clientX, clientY, frameEl){
   const rect=frameEl.getBoundingClientRect();
-  const x=(clientX-rect.left)/rect.width;   // 0..1
-  const y=(clientY-rect.top)/rect.height;
-  // Web Mercator world size at zoom
-  const world=256*Math.pow(2, mapZoom);
-  const sin=Math.sin(sampleLat*Math.PI/180);
-  const cx=(sampleLon+180)/360*world;
-  const cy=(0.5-Math.log((1+sin)/(1-sin))/(4*Math.PI))*world;
-  // Assume iframe shows roughly full width = world/scale; Windy embed is approximate
-  const scale=world / Math.pow(2, mapZoom); // = 256
-  // Use viewport: center of iframe = sampleLat/Lon, width maps to ~360/2^zoom degrees * aspect fudge
-  const degPerPxX = (360 / Math.pow(2, mapZoom)) / rect.width * 1.1;
-  const degPerPxY = (170 / Math.pow(2, mapZoom)) / rect.height * 1.1; // mercator compress
-  const lon = sampleLon + (x-0.5)*rect.width*degPerPxX;
-  const lat = sampleLat - (y-0.5)*rect.height*degPerPxY;
-  return {
-    lat: Math.max(-85, Math.min(85, lat)),
-    lon: ((lon+540)%360)-180
-  };
+  const x=(clientX-rect.left)/Math.max(rect.width,1);
+  const y=(clientY-rect.top)/Math.max(rect.height,1);
+  const z=mapZoom||8;
+  // Approximate degrees visible at zoom (WebMercator-ish)
+  const lonSpan=360/Math.pow(2,z)* (rect.width/256)*1.15;
+  const latSpan=lonSpan*(rect.height/Math.max(rect.width,1))*0.85;
+  const lon=sampleLon+(x-0.5)*lonSpan;
+  const lat=sampleLat-(y-0.5)*latSpan;
+  return {lat:Math.max(-85,Math.min(85,lat)), lon:((lon+540)%360)-180};
 }
 
 function setSampleMode(on){
   sampleMode=!!on;
-  $("sample-overlay")?.classList.toggle("on", sampleMode);
-  $("sample-hint")?.classList.toggle("on", sampleMode);
-  $("btn-sample")?.classList.toggle("on", sampleMode);
+  const ov=$("sample-overlay");
+  const hint=$("sample-hint");
+  const btn=$("btn-sample");
+  if(ov){ov.classList.toggle("on",sampleMode); ov.style.pointerEvents=sampleMode?"auto":"none";}
+  if(hint)hint.classList.toggle("on",sampleMode);
+  if(btn)btn.classList.toggle("on",sampleMode);
 }
 
 function initStorm3DControls(){
   $("btn-loc-sepa")?.addEventListener("click", ()=>setSample(PRESETS.sepa.lat, PRESETS.sepa.lon, "sepa"));
   $("btn-loc-19428")?.addEventListener("click", ()=>setSample(PRESETS.z19428.lat, PRESETS.z19428.lon, "z19428"));
   $("btn-s3d-refresh")?.addEventListener("click", ()=>refreshStorm3DPane());
-  $("btn-sample")?.addEventListener("click", ()=>setSampleMode(!sampleMode));
+  $("btn-sample")?.addEventListener("click", (e)=>{e.preventDefault();e.stopPropagation();setSampleMode(!sampleMode);});
   $("chip-storm3d")?.addEventListener("click", ()=>refreshStorm3DPane());
 
   const ov=$("sample-overlay");
-  ov?.addEventListener("click", (ev)=>{
-    const frame=$("radar")?.parentElement || ov;
-    const {lat,lon}=lonLatFromClick(ev.clientX, ev.clientY, frame);
-    const pin=$("sample-pin");
-    if(pin){
-      const rect=frame.getBoundingClientRect();
-      pin.style.display="block";
-      pin.style.left=(ev.clientX-rect.left)+"px";
-      pin.style.top=(ev.clientY-rect.top)+"px";
-    }
-    setSampleMode(false);
-    setSample(lat, lon, null);
-  });
+  if(ov){
+    ov.style.pointerEvents="none";
+    ov.addEventListener("click", (ev)=>{
+      if(!sampleMode) return;
+      ev.preventDefault();ev.stopPropagation();
+      const frame=$("radar")?.parentElement || ov;
+      const {lat,lon}=lonLatFromClick(ev.clientX, ev.clientY, frame);
+      const pin=$("sample-pin");
+      if(pin){
+        const rect=frame.getBoundingClientRect();
+        pin.style.display="block";
+        pin.style.left=(ev.clientX-rect.left)+"px";
+        pin.style.top=(ev.clientY-rect.top)+"px";
+      }
+      setSampleMode(false);
+      setSample(lat, lon, null);
+    });
+  }
 }
+
 
 // Keep modal openStorm3D as optional deep-dive without Worker URL button
 window.openStorm3D=async function(){
