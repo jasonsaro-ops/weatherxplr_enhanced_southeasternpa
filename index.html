@@ -8,6 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%233b9eff'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='%230a0c10' font-size='14' font-family='sans-serif' font-weight='700'%3EW%3C/text%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 :root{--bg:#0a0c10;--panel:#12151c;--raise:#181c26;--raise2:#1e2430;--line:#2a3140;--line-b:#3a4458;--text:#e8edf5;--text-mid:#9aa8bc;--text-dim:#6b7a90;--cyan:#3b9eff;--cyan2:#06b6d4;--amber:#f5a623;--green:#2ecc71;--red:#ef4444;--orange:#f97316;--purple:#a78bfa;--sev-extreme:#ef4444;--sev-severe:#f97316;--sev-moderate:#eab308;--sev-minor:#3b82f6;--font-sans:"IBM Plex Sans",system-ui,sans-serif;--font-mono:"IBM Plex Mono",ui-monospace,monospace;--r:6px;--hdr:44px}
 *{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:12px;overflow:hidden}
@@ -61,7 +62,10 @@
 .obs-row{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--raise);border:1px solid var(--line);border-radius:4px;margin-bottom:4px;cursor:pointer}
 .obs-row:hover{border-color:var(--cyan)}.obs-row .id{font-weight:600;font-size:11px}.obs-row .nm{font-size:9px;color:var(--text-dim)}.obs-row .tv{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--cyan)}
 .stage{position:relative;background:#05070c;min-height:0;display:flex;flex-direction:column}
-.map-frame{flex:1;position:relative;min-height:0}.map-frame iframe{width:100%;height:100%;border:none}
+.map-frame{flex:1;position:relative;min-height:0}
+#wx-map{position:absolute;inset:0;width:100%;height:100%;z-index:1;background:#0a0c10}
+.leaflet-container{background:#0a0c10;font-family:var(--font-sans)}
+.sample-marker{background:var(--cyan);border:2px solid #fff;border-radius:50%;width:14px;height:14px;margin:-7px 0 0 -7px;box-shadow:0 0 10px var(--cyan)}.map-frame iframe{width:100%;height:100%;border:none}
 .map-tools{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
 .map-btn{width:36px;height:36px;border-radius:8px;border:1px solid var(--line-b);background:rgba(18,21,28,.92);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px}
 .map-btn:hover,.map-btn.on{background:var(--cyan);color:#0a0c10;border-color:var(--cyan)}
@@ -190,15 +194,12 @@
   <div class="stage-split">
     <div class="map-frame">
       <div class="model-bar">
-        <div class="model-chip on" data-model="radar">Radar</div>
-        <div class="model-chip" data-model="satellite">Sat</div>
-        <div class="model-chip" data-model="wind">Wind</div>
-        <div class="model-chip" data-model="temp">Temp</div>
-        <div class="model-chip" data-model="rain">Precip</div>
-        <div class="model-chip" data-model="clouds">Clouds</div>
-        <div class="model-chip" data-model="thunder">CAPE</div>
+        <div class="model-chip on" data-layer="radar">Radar</div>
+        <div class="model-chip" data-layer="velocity">Velocity</div>
+        <div class="model-chip" data-layer="satellite">Sat IR</div>
+        <div class="model-chip" data-layer="qpe">QPE</div>
       </div>
-      <iframe id="radar" title="Radar"></iframe>
+      <div id="wx-map" role="application" aria-label="Radar map"></div>
 <div class="map-tools">
         <button type="button" class="map-btn" id="btn-layers" title="Layers"><i class="fa-solid fa-layer-group"></i></button>
         <button type="button" class="map-btn" id="btn-home" title="Home"><i class="fa-solid fa-crosshairs"></i></button>
@@ -259,7 +260,7 @@
         <span class="blank"></span>
       </div>
       <div class="s3d-loc" id="s3d-loc">40.0759°N 75.2996°W · sample</div>
-      <div class="s3d-loc" style="color:var(--text-dim);font-size:8px;padding-top:0">Use presets / lat-lon / nudge — Windy iframe clicks are blocked by the browser</div>
+      <div class="s3d-loc" style="color:var(--text-dim);font-size:8px;padding-top:0">Click the map to sample · or use presets / lat-lon / nudge</div>
       <div class="s3d-pane-body">
         <div class="s3d-metrics" id="s3d-metrics">
           <div class="row"><span class="k">Mode</span><span class="v" id="s3d-mode">—</span></div>
@@ -315,6 +316,7 @@
 </footer>
 </div>
 <div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"><div class="modal-hd"><span id="modal-title">Detail</span><span class="modal-x" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></span></div><div class="modal-bd" id="modal-body"></div></div></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
 <!-- Storm 3D Worker: set this once after first GitHub Actions deploy -->

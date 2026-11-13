@@ -53,33 +53,7 @@ function playSevs(set){let d=0;["extreme","severe","moderate","minor","unknown"]
 function initAudio(){try{audioOn=localStorage.getItem("wx_tones")==="1"}catch(e){}syncAudio();$("btn-audio").onclick=()=>{audioOn=!audioOn;try{localStorage.setItem("wx_tones",audioOn?"1":"0")}catch(e){}if(audioOn){ctx();playAdvisory()}syncAudio()}}
 function syncAudio(){$("btn-audio").classList.toggle("on",audioOn);$("audio-ico").className=audioOn?"fa-solid fa-volume-high":"fa-solid fa-volume-xmark";$("audio-lbl").textContent=audioOn?"ON":"OFF"}
 
-function windyUrl(layer){const prod=layer==="radar"||layer==="satellite"?layer:"gfs";return`https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=f&metricWind=mph&zoom=${mapZoom||8}&overlay=${layer}&product=${prod}&level=surface&lat=${sampleLat}&lon=${sampleLon}`}
-function setLayer(layer){$("radar").src=windyUrl(layer);document.querySelectorAll(".model-chip").forEach(c=>c.classList.toggle("on",c.dataset.model===layer));const r=document.querySelector(`input[name="ly"][value="${layer}"]`);if(r)r.checked=true}
-function initRadar(){setLayer("radar");document.querySelectorAll(".model-chip").forEach(c=>c.onclick=()=>setLayer(c.dataset.model));
-  document.querySelectorAll('input[name="ly"]').forEach(r=>r.onchange=()=>setLayer(r.value));
-  $("btn-layers").onclick=()=>{$("layer-pop").classList.toggle("open");$("btn-layers").classList.toggle("on")};
-  $("btn-home").onclick=()=>setLayer(document.querySelector('input[name="ly"]:checked')?.value||"radar");
-  document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".seg button").forEach(x=>x.classList.remove("on"));b.classList.add("on");document.querySelectorAll(".pane").forEach(p=>p.classList.remove("on"));$("pane-"+b.dataset.pane).classList.add("on")});
-  document.querySelectorAll(".nav-tab").forEach(t=>t.onclick=()=>{document.querySelectorAll(".nav-tab").forEach(x=>x.classList.remove("on"));t.classList.add("on");
-    if(t.dataset.view==="alerts"){document.querySelector('.seg button[data-pane="alerts"]').click()}
-    if(t.dataset.view==="models"){openModels()}})}
 
-function tickClock(){const n=new Date();$("clock").textContent=n.toLocaleTimeString("en-US",{hour12:false})+" L · "+n.toISOString().substr(11,8)+"Z"}
-
-async function fetchOpenMeteo(){
-  const url=`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York&forecast_days=7`;
-  try{omData=await fetch(url).then(r=>r.json());setFeed("om",true);renderConditions();renderForecast();renderSparks();renderModelCards()}
-  catch(e){setFeed("om",false)}
-  // Try HRRR-specific if available
-  try{
-    const h=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&models=gfs_hrrr&current=temperature_2m&temperature_unit=fahrenheit&timezone=America%2FNew_York`).then(r=>r.json());
-    if(h.current&&h.current.temperature_2m!=null){$("mg-hrrr").textContent=Math.round(h.current.temperature_2m)+"°";window.__hrrrT=h.current.temperature_2m}
-  }catch(e){}
-  try{
-    const g=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&models=gfs_seamless&current=temperature_2m&temperature_unit=fahrenheit&timezone=America%2FNew_York`).then(r=>r.json());
-    if(g.current&&g.current.temperature_2m!=null)$("mg-gfs").textContent=Math.round(g.current.temperature_2m)+"°";
-  }catch(e){}
-}
 function renderModelCards(){if(!omData||!omData.current)return;$("mg-blend").textContent=Math.round(omData.current.temperature_2m)+"°"}
 function renderConditions(){
   const c=omData&&omData.current;if(!c)return;
@@ -296,6 +270,115 @@ async function refreshAll(){
   if(typeof refreshStorm3DPane==="function") refreshStorm3DPane();
   $("chip-sync").textContent="SYNC "+new Date().toLocaleTimeString("en-US",{hour12:false});
 }
+
+/* ========== Leaflet + Mesonet NEXRAD (clickable) ========== */
+const RADAR_TILES = {
+  radar: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
+  velocity: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0v-900913/{z}/{x}/{y}.png",
+  satellite: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes-ir-4km-900913/{z}/{x}/{y}.png",
+  qpe: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/q2-n1p-900913/{z}/{x}/{y}.png",
+};
+let wxMap = null;
+let wxLayers = {};
+let sampleMarker = null;
+
+function initWxMap(){
+  if(typeof L === "undefined"){ console.error("Leaflet missing"); return; }
+  const el = $("wx-map");
+  if(!el){ console.error("#wx-map missing"); return; }
+  if(wxMap){ wxMap.invalidateSize(true); return; }
+  wxMap = L.map(el, {
+    center: [sampleLat, sampleLon],
+    zoom: mapZoom || 8,
+    minZoom: 4,
+    maxZoom: 12,
+    zoomControl: true,
+    preferCanvas: true,
+  });
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 16, maxNativeZoom: 16, attribution: "Esri · NWS · Iowa State Mesonet" }
+  ).addTo(wxMap);
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 16, maxNativeZoom: 16, opacity: 0.85 }
+  ).addTo(wxMap);
+
+  wxLayers.radar = L.tileLayer(RADAR_TILES.radar, { opacity: 0.7, maxZoom: 12, maxNativeZoom: 10, attribution: "NEXRAD" });
+  wxLayers.velocity = L.tileLayer(RADAR_TILES.velocity, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10 });
+  wxLayers.satellite = L.tileLayer(RADAR_TILES.satellite, { opacity: 0.5, maxZoom: 12, maxNativeZoom: 10 });
+  wxLayers.qpe = L.tileLayer(RADAR_TILES.qpe, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10 });
+  wxLayers.radar.addTo(wxMap);
+
+  sampleMarker = L.circleMarker([sampleLat, sampleLon], {
+    radius: 7, color: "#fff", weight: 2, fillColor: "#3b9eff", fillOpacity: 0.95
+  }).addTo(wxMap);
+  sampleMarker.bindTooltip("Storm 3D sample", { permanent: false });
+
+  wxMap.on("click", (e) => {
+    setSample(e.latlng.lat, e.latlng.lng, null);
+  });
+  wxMap.on("moveend", () => { mapZoom = wxMap.getZoom(); });
+
+  document.querySelectorAll(".model-chip[data-layer]").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const key = chip.dataset.layer;
+      document.querySelectorAll(".model-chip[data-layer]").forEach(c => c.classList.remove("on"));
+      chip.classList.add("on");
+      ["radar","velocity","satellite","qpe"].forEach(k => {
+        if(wxLayers[k] && wxMap.hasLayer(wxLayers[k])) wxMap.removeLayer(wxLayers[k]);
+      });
+      if(wxLayers[key]) wxLayers[key].addTo(wxMap);
+    });
+  });
+  const bindLy = (id, key) => {
+    $(id)?.addEventListener("change", (e) => {
+      if(!wxLayers[key]) return;
+      if(e.target.checked) wxLayers[key].addTo(wxMap);
+      else if(wxMap.hasLayer(wxLayers[key])) wxMap.removeLayer(wxLayers[key]);
+    });
+  };
+  bindLy("ly-radar", "radar");
+  bindLy("ly-velocity", "velocity");
+  bindLy("ly-sat", "satellite");
+  bindLy("ly-qpe", "qpe");
+
+  $("btn-layers")?.addEventListener("click", () => {
+    $("layer-pop")?.classList.toggle("open");
+    $("btn-layers")?.classList.toggle("on");
+  });
+  $("btn-home")?.addEventListener("click", () => {
+    setSample(PRESETS.sepa.lat, PRESETS.sepa.lon, "sepa");
+  });
+
+  setTimeout(() => wxMap.invalidateSize(true), 250);
+  window.addEventListener("resize", () => wxMap && wxMap.invalidateSize(true));
+  document.addEventListener("fullscreenchange", () => setTimeout(() => wxMap && wxMap.invalidateSize(true), 150));
+}
+
+function setLayer(layer){
+  if(!wxMap) return;
+  wxMap.setView([sampleLat, sampleLon], mapZoom || 8, { animate: true });
+  if(sampleMarker) sampleMarker.setLatLng([sampleLat, sampleLon]);
+}
+
+function initRadar(){
+  initWxMap();
+  document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+    document.querySelectorAll(".seg button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    document.querySelectorAll(".pane").forEach(pn => pn.classList.remove("on"));
+    $("pane-" + b.dataset.pane)?.classList.add("on");
+  });
+  document.querySelectorAll(".nav-tab").forEach(t => t.onclick = () => {
+    document.querySelectorAll(".nav-tab").forEach(x => x.classList.remove("on"));
+    t.classList.add("on");
+    if(t.dataset.view === "alerts") document.querySelector('.seg button[data-pane="alerts"]')?.click();
+    if(t.dataset.view === "models" && typeof openModels === "function") openModels();
+  });
+}
+
+
 async function boot(){
   const bar=$("boot-prog"),st=$("boot-st");
   const steps=[[15,"CONNECTING NWS…"],[35,"OPEN-METEO · HRRR…"],[55,"ALERTS · SPC…"],[75,"OBS · AQ · TIDES…"],[90,"RADAR ARRAY…"],[100,"DISPATCH ONLINE"]];
@@ -326,8 +409,11 @@ function setSample(lat, lon, presetKey){
   document.querySelectorAll("#s3d-presets button").forEach(b=>{
     b.classList.toggle("active", presetKey && b.dataset.preset===presetKey);
   });
-  const layer = document.querySelector('input[name="ly"]:checked')?.value || "radar";
-  setLayer(layer);
+  if(wxMap){
+    wxMap.setView([sampleLat, sampleLon], mapZoom || wxMap.getZoom() || 8, { animate: true });
+    if(sampleMarker) sampleMarker.setLatLng([sampleLat, sampleLon]);
+    else sampleMarker = L.circleMarker([sampleLat, sampleLon], { radius:7, color:"#fff", weight:2, fillColor:"#3b9eff", fillOpacity:0.95 }).addTo(wxMap);
+  }
   const m=$("s3d-mode"); if(m) m.textContent="LOADING…";
   refreshStorm3DPane();
 }
