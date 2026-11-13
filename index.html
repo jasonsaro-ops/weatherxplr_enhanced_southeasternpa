@@ -52,12 +52,20 @@
 .g-tile svg{width:100%;max-width:90px;height:auto;display:block;margin:2px auto 0}
 .metric-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)}
 .metric-row:last-child{border-bottom:none}.metric-row .k{font-size:10px;color:var(--text-dim)}.metric-row .v{font-family:var(--font-mono);font-weight:600;font-size:12px}
-.alert-item{border-left:3px solid var(--text-dim);background:var(--raise);padding:7px 8px;margin-bottom:5px;border-radius:0 var(--r) var(--r) 0;cursor:pointer}
-.alert-item:hover{filter:brightness(1.08)}
-.alert-item.sev-extreme{border-left-color:var(--sev-extreme);background:#2a1214}
-.alert-item.sev-severe{border-left-color:var(--sev-severe);background:#2a1a10}
-.alert-item.sev-moderate{border-left-color:var(--sev-moderate);background:#242010}
-.alert-item.sev-minor{border-left-color:var(--sev-minor);background:#121a2a}
+.alert-item,.alert-row{border-left:4px solid var(--text-dim);background:var(--raise);padding:8px 10px;margin-bottom:6px;border-radius:0 var(--r) var(--r) 0;cursor:pointer;transition:filter .15s,border-color .15s}
+.alert-item:hover,.alert-row:hover{filter:brightness(1.12)}
+.alert-item.sev-extreme,.alert-row.sev-extreme{border-left-color:var(--sev-extreme);background:linear-gradient(90deg,#3a1418 0%,var(--raise) 70%)}
+.alert-item.sev-severe,.alert-row.sev-severe{border-left-color:var(--sev-severe);background:linear-gradient(90deg,#3a2010 0%,var(--raise) 70%)}
+.alert-item.sev-moderate,.alert-row.sev-moderate{border-left-color:var(--sev-moderate);background:linear-gradient(90deg,#2e2810 0%,var(--raise) 70%)}
+.alert-item.sev-minor,.alert-row.sev-minor{border-left-color:var(--sev-minor);background:linear-gradient(90deg,#142030 0%,var(--raise) 70%)}
+.alert-item.sev-unknown,.alert-row.sev-unknown{border-left-color:var(--text-dim)}
+.alert-item .ev,.alert-row .ev{font-weight:700;font-size:12px;color:var(--text);margin-bottom:3px;letter-spacing:.02em}
+.alert-item .hd,.alert-row .hd{font-size:11px;color:var(--text-mid);line-height:1.35}
+.alert-item.sev-extreme .ev,.alert-row.sev-extreme .ev{color:#fca5a5}
+.alert-item.sev-severe .ev,.alert-row.sev-severe .ev{color:#fdba74}
+.alert-item.sev-moderate .ev,.alert-row.sev-moderate .ev{color:#fde047}
+.alert-item.sev-minor .ev,.alert-row.sev-minor .ev{color:#93c5fd}
+#alerts-list{padding:2px 0}
 .alert-ev{font-weight:600;font-size:11px;text-transform:uppercase}.alert-meta{font-size:9px;color:var(--text-dim);margin-top:2px;line-height:1.3}
 .obs-row{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--raise);border:1px solid var(--line);border-radius:4px;margin-bottom:4px;cursor:pointer}
 .obs-row:hover{border-color:var(--cyan)}.obs-row .id{font-weight:600;font-size:11px}.obs-row .nm{font-size:9px;color:var(--text-dim)}.obs-row .tv{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--cyan)}
@@ -341,6 +349,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261112e"></script>
+<script src="app.js?v=20261113a"></script>
 </body>
 </html>

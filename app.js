@@ -191,10 +191,20 @@ async function fetchAlerts(){
     const list=$("alerts-list");
     if(list){
       if(!all.length) list.innerHTML='<span class="err" style="color:var(--text-dim)">No active alerts (PA/NJ/DE)</span>';
-      else list.innerHTML=all.slice(0,40).map(f=>{
-        const p=f.properties||{};
-        return `<div class="alert-row ${sevClass(p.severity)}" onclick='openAlert(${JSON.stringify(String(f.id||"")).replace(/'/g,"")})'><div class="ev">${esc(p.event||"Alert")}</div><div class="hd">${esc(p.headline||p.areaDesc||"")}</div></div>`;
-      }).join("");
+      else {
+        list.innerHTML=all.slice(0,40).map(f=>{
+          const p=f.properties||{};
+          const id=esc(f.id||"");
+          return `<div class="alert-item ${sevClass(p.severity)}" data-id="${id}" role="button" tabindex="0">
+            <div class="ev">${esc(p.event||"Alert")}</div>
+            <div class="hd">${esc(p.headline||p.areaDesc||"")}</div>
+          </div>`;
+        }).join("");
+        list.querySelectorAll(".alert-item").forEach(el=>{
+          el.addEventListener("click",()=>openAlert(el.getAttribute("data-id")));
+          el.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" ") openAlert(el.getAttribute("data-id")); });
+        });
+      }
     }
     // audio for new severe
     const ids=new Set(all.map(f=>f.id));
