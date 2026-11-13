@@ -54,16 +54,24 @@ async function buildStorm(lat, lon) {
 
   // Heuristic structure from public fields (NOT Level-II measured)
   let echoTop = 0;
-  let maxDbz = 5;
-  let maxDbzHt = 2000;
+  let maxDbz = 0;
+  let maxDbzHt = 0;
   let coreTop = 0;
   let intensity = "none";
+  const raining = precip >= 0.01 || (code >= 51 && code < 90) || code === 80;
 
-  if (hasTstorm || cape > 500 || precip > 0.1) {
+  if (raining || cape > 200) {
     intensity = "weak";
-    maxDbz = 35 + Math.min(25, cape / 80);
-    echoTop = 18000 + Math.min(28000, cape * 12);
-    maxDbzHt = 4000 + Math.min(8000, cape * 2);
+    maxDbz = 28 + Math.min(20, precip * 40 + cape / 100);
+    echoTop = 12000 + Math.min(18000, precip * 8000 + cape * 8);
+    maxDbzHt = 3000 + Math.min(6000, cape * 2);
+    coreTop = echoTop * 0.45;
+  }
+  if (hasTstorm || cape > 500 || precip > 0.15 || code >= 80) {
+    intensity = "weak";
+    maxDbz = Math.max(maxDbz, 35 + Math.min(25, cape / 80 + precip * 30));
+    echoTop = Math.max(echoTop, 18000 + Math.min(28000, cape * 12));
+    maxDbzHt = Math.max(maxDbzHt, 4000 + Math.min(8000, cape * 2));
     coreTop = echoTop * 0.55;
   }
   if (cape > 1500 || code >= 95 || (alerts.severe && alerts.severe.some(a => /tornado|severe thunder/i.test(a.event)))) {
@@ -80,15 +88,10 @@ async function buildStorm(lat, lon) {
     maxDbzHt = 8000 + Math.min(15000, cape * 2);
     coreTop = echoTop * 0.72;
   }
-  if (precip > 0.5) maxDbz = Math.min(75, maxDbz + 5);
+  if (precip > 0.3) maxDbz = Math.min(75, maxDbz + 8);
   if (gust > 40) coreTop = Math.min(echoTop * 0.85, coreTop + 3000);
-
-  // Quiet sky
-  if (intensity === "none" && precip < 0.05 && cape < 300) {
-    echoTop = 0;
-    maxDbz = 0;
-    maxDbzHt = 0;
-    coreTop = 0;
+  if (!raining && !hasTstorm && cape < 200 && precip < 0.01) {
+    echoTop = 0; maxDbz = 0; maxDbzHt = 0; coreTop = 0; intensity = "none";
   }
 
   return {

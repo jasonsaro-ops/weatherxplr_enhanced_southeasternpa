@@ -328,6 +328,7 @@ function setSample(lat, lon, presetKey){
   });
   const layer = document.querySelector('input[name="ly"]:checked')?.value || "radar";
   setLayer(layer);
+  const m=$("s3d-mode"); if(m) m.textContent="LOADING…";
   refreshStorm3DPane();
 }
 
@@ -363,23 +364,41 @@ async function buildStormClient(lat, lon){
     }).slice(0,5).map(p=>({event:p.event,severity:p.severity,headline:p.headline}));
   }catch(e){}
 
-  let echoTop=0,maxDbz=5,maxDbzHt=2000,coreTop=0,intensity="none";
+  let echoTop=0,maxDbz=0,maxDbzHt=0,coreTop=0,intensity="none";
   const hasTstorm=code>=95||severe.length>0;
-  if(hasTstorm||cape>500||precip>0.1){
-    intensity="weak"; maxDbz=35+Math.min(25,cape/80); echoTop=18000+Math.min(28000,cape*12);
-    maxDbzHt=4000+Math.min(8000,cape*2); coreTop=echoTop*0.55;
+  const raining=precip>=0.01||(code>=51&&code<90)||code===61||code===63||code===65||code===80||code===81||code===82;
+  // Stratiform / light rain — still show a volume (CAPE often low in cool-season rain)
+  if(raining||cape>200){
+    intensity="weak";
+    maxDbz=28+Math.min(20, precip*40+cape/100);
+    echoTop=12000+Math.min(18000, precip*8000+cape*8);
+    maxDbzHt=3000+Math.min(6000,cape*2);
+    coreTop=echoTop*0.45;
+  }
+  if(hasTstorm||cape>500||precip>0.15||code>=80){
+    intensity="weak";
+    maxDbz=Math.max(maxDbz, 35+Math.min(25,cape/80+precip*30));
+    echoTop=Math.max(echoTop, 18000+Math.min(28000,cape*12));
+    maxDbzHt=Math.max(maxDbzHt, 4000+Math.min(8000,cape*2));
+    coreTop=echoTop*0.55;
   }
   if(cape>1500||code>=95||severe.some(a=>/tornado|severe thunder/i.test(a.event||""))){
-    intensity="moderate"; maxDbz=50+Math.min(15,cape/200); echoTop=30000+Math.min(20000,cape*8);
-    maxDbzHt=6000+Math.min(12000,cape*3); coreTop=echoTop*0.65;
+    intensity="moderate";
+    maxDbz=50+Math.min(15,cape/200);
+    echoTop=30000+Math.min(20000,cape*8);
+    maxDbzHt=6000+Math.min(12000,cape*3);
+    coreTop=echoTop*0.65;
   }
   if(cape>2500||severe.some(a=>/tornado/i.test(a.event||""))){
-    intensity="strong"; maxDbz=Math.min(72,58+cape/500); echoTop=Math.min(60000,40000+cape*6);
-    maxDbzHt=8000+Math.min(15000,cape*2); coreTop=echoTop*0.72;
+    intensity="strong";
+    maxDbz=Math.min(72,58+cape/500);
+    echoTop=Math.min(60000,40000+cape*6);
+    maxDbzHt=8000+Math.min(15000,cape*2);
+    coreTop=echoTop*0.72;
   }
-  if(precip>0.5) maxDbz=Math.min(75,maxDbz+5);
+  if(precip>0.3) maxDbz=Math.min(75, maxDbz+8);
   if(gust>40) coreTop=Math.min(echoTop*0.85,coreTop+3000);
-  if(intensity==="none"&&precip<0.05&&cape<300){echoTop=0;maxDbz=0;maxDbzHt=0;coreTop=0}
+  if(!raining&&!hasTstorm&&cape<200&&precip<0.01){echoTop=0;maxDbz=0;maxDbzHt=0;coreTop=0;intensity="none"}
 
   return{
     ok:true,

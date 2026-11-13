@@ -33,13 +33,13 @@
 .chip.live{border-color:var(--green);color:var(--green)}.chip.alert{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.1)}
 .chip.btn{cursor:pointer}.chip.btn:hover{border-color:var(--cyan);color:var(--cyan)}.chip.on{border-color:var(--green);color:var(--green)}
 .clock{font-family:var(--font-mono);font-size:12px;color:var(--amber)}.top-right{display:flex;align-items:center;gap:6px}
-.main{display:grid;grid-template-columns:280px 1fr 260px;min-height:0;overflow:hidden}
+.main{display:grid;grid-template-columns:240px 1fr 220px;min-height:0;overflow:hidden}
 .rail{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .rail.right{border-right:none;border-left:1px solid var(--line)}
 .seg{display:flex;padding:6px;gap:4px;border-bottom:1px solid var(--line);flex-shrink:0}
 .seg button{flex:1;padding:6px 4px;border:1px solid var(--line);background:var(--raise);color:var(--text-mid);border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.04em;cursor:pointer;text-transform:uppercase}
 .seg button.on{background:var(--cyan);color:#0a0c10;border-color:var(--cyan)}
-.rail-body{flex:1;overflow-y:auto;padding:8px;min-height:0}.pane{display:none}.pane.on{display:block}
+.rail-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px;min-height:0}.pane{display:none}.pane.on{display:block}
 .card{background:var(--raise);border:1px solid var(--line);border-radius:var(--r);padding:8px;margin-bottom:8px;cursor:pointer;transition:border-color .12s}
 .card:hover{border-color:var(--cyan)}.card-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .card-title{font-size:10px;font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
@@ -95,7 +95,7 @@
 .modal-x{cursor:pointer;color:var(--text-dim);padding:4px 6px}.modal-x:hover{color:var(--red)}.modal-bd{padding:16px;overflow-y:auto;font-size:13px;line-height:1.5}
 .btn{background:transparent;border:1px solid var(--line);color:var(--cyan);padding:6px 10px;border-radius:4px;font-family:var(--font-mono);font-size:10px;cursor:pointer;margin-top:8px}.btn:hover{border-color:var(--cyan);background:rgba(59,158,255,.1)}
 .empty{color:var(--green);font-size:11px;padding:6px 0}.err{color:var(--red);font-size:11px}
-@media(max-width:1100px){.main{grid-template-columns:240px 1fr}.rail.right{display:none}}
+@media(max-width:1100px){.main{grid-template-columns:200px 1fr}.rail.right{display:none}}
 
 /* Storm 3D modal */
 .s3d-wrap{display:grid;grid-template-columns:240px 1fr;gap:0;min-height:420px;height:min(70vh,560px)}
@@ -113,7 +113,7 @@
 @media(max-width:700px){.s3d-wrap{grid-template-columns:1fr;height:auto}.s3d-canvas-wrap{height:320px}}
 
 
-.stage-split{flex:1;display:grid;grid-template-columns:1fr 340px;min-height:0;overflow:hidden}
+.stage-split{flex:1;display:grid;grid-template-columns:1fr minmax(320px,38%);min-height:0;overflow:hidden}
 .s3d-pane{display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line);min-height:0;overflow:hidden}
 .s3d-pane-hd{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--line);flex-shrink:0;gap:6px;flex-wrap:wrap}
 .s3d-pane-hd h3{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan)}
@@ -122,7 +122,7 @@
 .s3d-btns button:hover,.s3d-btns button.on{border-color:var(--cyan);color:var(--cyan)}
 .s3d-btns button.active{background:var(--cyan);color:#0a0c10;border-color:var(--cyan)}
 .s3d-pane-body{flex:1;display:flex;flex-direction:column;min-height:0}
-.s3d-metrics{padding:8px;border-bottom:1px solid var(--line);flex-shrink:0;max-height:42%;overflow-y:auto;font-size:11px}
+.s3d-metrics{padding:4px 8px;border-bottom:1px solid var(--line);flex-shrink:0;font-size:10px}
 .s3d-metrics .row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line)}
 .s3d-metrics .row:last-child{border-bottom:none}
 .s3d-metrics .k{color:var(--text-dim);font-size:9px}.s3d-metrics .v{font-family:var(--font-mono);font-weight:600;font-size:11px}
@@ -134,11 +134,11 @@
 .sample-hint{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(18,21,28,.95);border:1px solid var(--cyan);color:var(--cyan);padding:4px 10px;border-radius:4px;font-family:var(--font-mono);font-size:10px;z-index:10;display:none}
 .sample-hint.on{display:block}
 .s3d-loc{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);padding:0 8px 6px}
-@media(max-width:1200px){.stage-split{grid-template-columns:1fr 280px}}
+@media(max-width:1200px){.stage-split{grid-template-columns:1fr minmax(280px,36%)}}
 @media(max-width:900px){.stage-split{grid-template-columns:1fr;grid-template-rows:1fr 280px}.s3d-pane{border-left:none;border-top:1px solid var(--line)}}
 
 
-.s3d-view{flex:1 1 auto;min-height:180px !important;position:relative;background:#05070c}
+.s3d-view{flex:1 1 auto;min-height:220px !important;position:relative;background:#05070c}
 .s3d-pane{min-height:0}
 .s3d-sample-form{display:flex;flex-wrap:wrap;gap:4px;padding:0 8px 6px;align-items:center}
 .s3d-sample-form input{width:72px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:3px 5px;font-family:var(--font-mono);font-size:10px}
@@ -259,6 +259,7 @@
         <span class="blank"></span>
       </div>
       <div class="s3d-loc" id="s3d-loc">40.0759°N 75.2996°W · sample</div>
+      <div class="s3d-loc" style="color:var(--text-dim);font-size:8px;padding-top:0">Use presets / lat-lon / nudge — Windy iframe clicks are blocked by the browser</div>
       <div class="s3d-pane-body">
         <div class="s3d-metrics" id="s3d-metrics">
           <div class="row"><span class="k">Mode</span><span class="v" id="s3d-mode">—</span></div>
