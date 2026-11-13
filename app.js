@@ -1,4 +1,6 @@
 const LAT=40.0759,LON=-75.2996,CYCLE=120;
+let sampleLat=40.0759,sampleLon=-75.2996,sampleMode=false,mapZoom=8;
+const PRESETS={sepa:{lat:40.0759,lon:-75.2996,label:"SE-PA"},z19428:{lat:40.0685,lon:-75.3045,label:"19428"}};
 const GAUGES=[{id:"01472000",name:"Schuylkill @ Reading"},{id:"01473500",name:"Schuylkill @ Pottstown"},{id:"01474500",name:"Schuylkill @ Norriton"},{id:"01474703",name:"Schuylkill @ Conshohocken"},{id:"01474000",name:"Schuylkill @ Fairmount Dam"}];
 const WMO={0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",51:"Light drizzle",61:"Light rain",63:"Rain",65:"Heavy rain",71:"Light snow",80:"Showers",95:"Thunderstorm"};
 let cd=CYCLE,audioOn=false,audioCtx=null,alertCache={},obsCache={},aqiCache={},kphlObs=null,afdFull="";
@@ -42,7 +44,7 @@ function playSevs(set){let d=0;["extreme","severe","moderate","minor","unknown"]
 function initAudio(){try{audioOn=localStorage.getItem("wx_tones")==="1"}catch(e){}syncAudio();$("btn-audio").onclick=()=>{audioOn=!audioOn;try{localStorage.setItem("wx_tones",audioOn?"1":"0")}catch(e){}if(audioOn){ctx();playAdvisory()}syncAudio()}}
 function syncAudio(){$("btn-audio").classList.toggle("on",audioOn);$("audio-ico").className=audioOn?"fa-solid fa-volume-high":"fa-solid fa-volume-xmark";$("audio-lbl").textContent=audioOn?"ON":"OFF"}
 
-function windyUrl(layer){const prod=layer==="radar"||layer==="satellite"?layer:"gfs";return`https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=f&metricWind=mph&zoom=8&overlay=${layer}&product=${prod}&level=surface&lat=${LAT}&lon=${LON}`}
+function windyUrl(layer){const prod=layer==="radar"||layer==="satellite"?layer:"gfs";return`https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=f&metricWind=mph&zoom=${mapZoom||8}&overlay=${layer}&product=${prod}&level=surface&lat=${sampleLat}&lon=${sampleLon}`}
 function setLayer(layer){$("radar").src=windyUrl(layer);document.querySelectorAll(".model-chip").forEach(c=>c.classList.toggle("on",c.dataset.model===layer));const r=document.querySelector(`input[name="ly"][value="${layer}"]`);if(r)r.checked=true}
 function initRadar(){setLayer("radar");document.querySelectorAll(".model-chip").forEach(c=>c.onclick=()=>setLayer(c.dataset.model));
   document.querySelectorAll('input[name="ly"]').forEach(r=>r.onchange=()=>setLayer(r.value));
@@ -266,38 +268,55 @@ window.openModels=function(){
 
 async function refreshAll(){
   await Promise.all([fetchOpenMeteo(),fetchAlerts(),fetchObs(),fetchAQI(),fetchTides(),fetchKPHL()]);
-  fetchHydro();$("chip-sync").textContent="SYNC "+new Date().toLocaleTimeString("en-US",{hour12:false});
+  fetchHydro();
+  if(typeof refreshStorm3DPane==="function") refreshStorm3DPane();
+  $("chip-sync").textContent="SYNC "+new Date().toLocaleTimeString("en-US",{hour12:false});
 }
 async function boot(){
   const bar=$("boot-prog"),st=$("boot-st");
   const steps=[[15,"CONNECTING NWS…"],[35,"OPEN-METEO · HRRR…"],[55,"ALERTS · SPC…"],[75,"OBS · AQ · TIDES…"],[90,"RADAR ARRAY…"],[100,"DISPATCH ONLINE"]];
   let i=0;const t=setInterval(()=>{if(i<steps.length){bar.style.width=steps[i][0]+"%";st.textContent=steps[i][1];i++}},280);
   initRadar();initAudio();tickClock();setInterval(tickClock,1000);
-  await refreshAll();clearInterval(t);bar.style.width="100%";st.textContent="ONLINE";
+  await refreshAll();
+  initStorm3DControls();
+  setTimeout(()=>refreshStorm3DPane(), 400);clearInterval(t);bar.style.width="100%";st.textContent="ONLINE";
   setTimeout(()=>{$("boot").classList.add("out");$("app").classList.add("on");setTimeout(()=>$("boot")?.remove(),600)},350);
   setInterval(()=>{cd--;if(cd<=0){cd=CYCLE;refreshAll()}$("cd").textContent=cd},1000);
 }
 document.addEventListener("DOMContentLoaded",boot);
 
-/* ========== STORM 3D (Three.js + optional CF Worker) ========== */
-// Set after you deploy the worker, e.g.:
-// "https://weatherxplr-storm3d.YOUR_SUBDOMAIN.workers.dev"
-// Auto: 1) window.STORM3D_WORKER_URL in index.html  2) localStorage  3) empty = client heuristics
+/* ========== STORM 3D (always-on pane + click-to-sample) ========== */
+// Worker URL is set in index.html → window.STORM3D_WORKER_URL (no manual button needed)
 const STORM3D_WORKER = (typeof window !== "undefined" && window.STORM3D_WORKER_URL) ||
   localStorage.getItem("wx_storm3d_worker") || "";
 
-let s3d = { renderer:null, scene:null, camera:null, cloud:null, anim:null, data:null };
+let s3d = { renderer:null, scene:null, camera:null, cloud:null, anim:null, data:null, _ro:null };
+
+function setSample(lat, lon, presetKey){
+  sampleLat = lat; sampleLon = lon;
+  const el = $("s3d-loc");
+  if(el) el.textContent = lat.toFixed(4) + "°N " + Math.abs(lon).toFixed(4) + "°W";
+  document.querySelectorAll("#btn-loc-sepa, #btn-loc-19428").forEach(b => b.classList.remove("active"));
+  if(presetKey === "sepa") $("btn-loc-sepa")?.classList.add("active");
+  if(presetKey === "z19428") $("btn-loc-19428")?.classList.add("active");
+  // Recenter Windy on sample
+  const layer = document.querySelector('input[name="ly"]:checked')?.value || "radar";
+  setLayer(layer);
+  refreshStorm3DPane();
+}
+
+
+
+// Override earlier setLayer if defined later — we redefine after init; patch at end of boot
 
 async function fetchStorm3D(){
-  const lat=LAT, lon=LON;
-  // 1) Prefer Cloudflare Worker if configured
+  const lat = sampleLat, lon = sampleLon;
   if(STORM3D_WORKER){
     try{
-      const r=await fetch(`${STORM3D_WORKER.replace(/\/$/,"")}?lat=${lat}&lon=${lon}`);
+      const r = await fetch(`${STORM3D_WORKER.replace(/\/$/,"")}?lat=${lat}&lon=${lon}`);
       if(r.ok) return await r.json();
     }catch(e){ console.warn("Storm3D worker failed", e); }
   }
-  // 2) Client-side fallback (same heuristics as worker)
   return buildStormClient(lat, lon);
 }
 
@@ -338,18 +357,17 @@ async function buildStormClient(lat, lon){
   return{
     ok:true,
     mode:intensity==="none"?"clear":"estimated",
-    disclaimer:"Structure estimated from Open-Meteo CAPE/precip + NWS alerts — not Level-II measured volume.",
+    disclaimer:"Estimated from Open-Meteo + NWS at sample point — not Level-II volume.",
     location:{lat,lon},
     time:new Date().toISOString(),
     timeLocal:new Date().toLocaleString("en-US",{timeZone:"America/New_York"}),
     metrics:{echoTopFt:Math.round(echoTop),maxDbz:Math.round(maxDbz*10)/10,maxDbzHeightFt:Math.round(maxDbzHt),coreTopFt:Math.round(coreTop),intensity,cape:Math.round(cape),precipIn:Math.round(precip*100)/100,weatherCode:code,gustMph:Math.round(gust)},
     alerts:severe,
-    source:{meteo:"Open-Meteo",alerts:"api.weather.gov",path:STORM3D_WORKER?"worker-fallback":"client"}
+    source:{meteo:"Open-Meteo",alerts:"api.weather.gov",path:STORM3D_WORKER?"worker":"client"}
   };
 }
 
 function dbzColor(dbz){
-  // Approximate NWS reflectivity ramp
   if(dbz<5) return 0x1a3a2a;
   if(dbz<20) return 0x1a9850;
   if(dbz<30) return 0x91cf60;
@@ -361,10 +379,19 @@ function dbzColor(dbz){
 
 function disposeStorm3D(){
   if(s3d.anim){cancelAnimationFrame(s3d.anim);s3d.anim=null}
+  if(s3d._ro){try{s3d._ro.disconnect()}catch(e){} s3d._ro=null}
   if(s3d.cloud){
     s3d.scene&&s3d.scene.remove(s3d.cloud);
-    s3d.cloud.geometry?.dispose();
-    s3d.cloud.material?.dispose();
+    s3d.cloud.geometry?.dispose?.();
+    if(s3d.cloud.material){
+      if(Array.isArray(s3d.cloud.material)) s3d.cloud.material.forEach(m=>m.dispose?.());
+      else s3d.cloud.material.dispose?.();
+    }
+    // group children
+    s3d.cloud.traverse?.(obj=>{
+      obj.geometry?.dispose?.();
+      if(obj.material){ if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose?.()); else obj.material.dispose?.(); }
+    });
     s3d.cloud=null;
   }
   if(s3d.renderer){
@@ -384,93 +411,70 @@ function buildStormCloud(metrics){
   const maxHt=metrics.maxDbzHeightFt||core*0.4;
 
   if(maxDbz<5||echo<1000){
-    // clear — faint ground haze
-    const geo=new THREE.SphereGeometry(0.15,12,12);
-    const mat=new THREE.MeshBasicMaterial({color:0x1a9850,transparent:true,opacity:0.15});
+    const geo=new THREE.SphereGeometry(0.12,12,12);
+    const mat=new THREE.MeshBasicMaterial({color:0x1a9850,transparent:true,opacity:0.12});
     const m=new THREE.Mesh(geo,mat); m.position.y=0.05; group.add(m);
     return group;
   }
 
-  // Stack of translucent spheres / ellipsoids approximating volume
   const layers=14;
   for(let i=0;i<layers;i++){
     const t=i/(layers-1);
     const hFt=echo*t;
-    // wider mid-level, taper at top
-    const width=0.55*Math.sin(Math.PI*Math.min(1,t*1.15))* (0.7+0.3*(maxDbz/70));
-    const y=t*2.2; // map 0..echoTop to 0..2.2 scene units (60k ft scale used in labels)
+    const width=0.55*Math.sin(Math.PI*Math.min(1,t*1.15))*(0.7+0.3*(maxDbz/70));
+    const y=t*2.2;
     let dbz=maxDbz*(1-Math.abs(hFt-maxHt)/Math.max(echo,1));
     dbz=Math.max(10, dbz);
     if(hFt>core) dbz*=0.75;
     if(hFt>echo*0.85) dbz*=0.45;
-
     const geo=new THREE.SphereGeometry(Math.max(0.08,width),16,12);
     geo.scale(1.2, 0.55+0.2*Math.sin(t*Math.PI), 1.2);
-    const mat=new THREE.MeshBasicMaterial({
-      color:dbzColor(dbz),
-      transparent:true,
-      opacity:0.18+0.35*(dbz/70),
-      depthWrite:false
-    });
+    const mat=new THREE.MeshBasicMaterial({color:dbzColor(dbz),transparent:true,opacity:0.18+0.35*(dbz/70),depthWrite:false});
     const mesh=new THREE.Mesh(geo,mat);
-    mesh.position.y=y;
-    // slight offset for organic look
-    mesh.position.x=(Math.sin(i*1.7)*0.08);
-    mesh.position.z=(Math.cos(i*1.3)*0.08);
+    mesh.position.set(Math.sin(i*1.7)*0.08, y, Math.cos(i*1.3)*0.08);
     group.add(mesh);
   }
-
-  // denser core
-  const coreY=(core/echo)*2.2*0.5;
   const coreGeo=new THREE.SphereGeometry(0.28*(maxDbz/60),14,12);
   const coreMat=new THREE.MeshBasicMaterial({color:dbzColor(maxDbz),transparent:true,opacity:0.55,depthWrite:false});
   const coreMesh=new THREE.Mesh(coreGeo,coreMat);
   coreMesh.position.y=Math.max(0.15, (maxHt/echo)*2.2);
   group.add(coreMesh);
-
   return group;
 }
 
 function initStormScene(container, metrics){
+  if(!window.THREE || !container) return;
   disposeStorm3D();
-  const w=container.clientWidth||640;
-  const h=container.clientHeight||420;
+  const w=Math.max(container.clientWidth||300, 100);
+  const h=Math.max(container.clientHeight||200, 100);
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x05070c);
   const camera=new THREE.PerspectiveCamera(42, w/h, 0.1, 100);
   camera.position.set(3.2, 1.8, 3.2);
   camera.lookAt(0, 1.0, 0);
-
   const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
   renderer.setSize(w,h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
   container.appendChild(renderer.domElement);
   renderer.domElement.id="s3d-canvas";
 
-  // Height box wireframe (0–60k ft → 0–2.4 units)
   const boxH=2.4, boxW=1.6;
   const edges=new THREE.EdgesGeometry(new THREE.BoxGeometry(boxW, boxH, boxW));
   const line=new THREE.LineSegments(edges, new THREE.LineBasicMaterial({color:0x3a4458}));
   line.position.y=boxH/2;
   scene.add(line);
-
-  // Floor
   const floor=new THREE.GridHelper(boxW, 6, 0x2a3140, 0x1e2430);
   floor.position.y=0.01;
   scene.add(floor);
 
-  // Cardinal labels via simple sprites would be heavy — skip; badge shows scale
-
   const cloud=buildStormCloud(metrics||{});
   scene.add(cloud);
-
-  s3d={renderer,scene,camera,cloud,anim:null,data:metrics};
+  s3d={renderer,scene,camera,cloud,anim:null,data:metrics,_ro:null};
   let t0=performance.now();
   function tick(now){
     s3d.anim=requestAnimationFrame(tick);
     const t=(now-t0)/1000;
     if(s3d.cloud) s3d.cloud.rotation.y=t*0.15;
-    // gentle camera orbit
     const r=4.2;
     camera.position.x=Math.sin(t*0.12)*r;
     camera.position.z=Math.cos(t*0.12)*r;
@@ -479,11 +483,10 @@ function initStormScene(container, metrics){
     renderer.render(scene,camera);
   }
   tick(t0);
-
-  // resize
   const ro=new ResizeObserver(()=>{
     if(!s3d.renderer) return;
     const nw=container.clientWidth, nh=container.clientHeight;
+    if(nw<10||nh<10) return;
     s3d.camera.aspect=nw/Math.max(nh,1);
     s3d.camera.updateProjectionMatrix();
     s3d.renderer.setSize(nw,nh);
@@ -492,74 +495,100 @@ function initStormScene(container, metrics){
   s3d._ro=ro;
 }
 
-window.openStorm3D=async function(){
-  openModal("Storm 3D · SE-PA",`<div style="text-align:center;padding:24px;color:var(--text-mid)"><i class="fa-solid fa-spinner fa-spin"></i> Building volume…</div>`);
-  $("modal").classList.add("wide");
-  let data;
-  try{ data=await fetchStorm3D(); }catch(e){ data={ok:false,error:String(e)}; }
-  s3d.data=data;
+function updateStormMetricsUI(data){
   const m=(data&&data.metrics)||{};
-  const mode=data.mode||"unknown";
-  const alerts=(data.alerts||[]).map(a=>`<div class="alert-item ${sevClass(a.severity)}" style="margin-top:6px"><div class="alert-ev">${esc(a.event||"")}</div></div>`).join("")||`<div class="empty">No severe alerts at point</div>`;
+  const mode=(data&&data.mode)||"—";
+  const set=(id,v)=>{const e=$(id); if(e) e.textContent=v};
+  set("s3d-mode", String(mode).toUpperCase());
+  set("s3d-echo", m.echoTopFt ? m.echoTopFt.toLocaleString()+" ft" : "—");
+  set("s3d-dbz", m.maxDbz!=null ? m.maxDbz+" dBZ" : "—");
+  set("s3d-core", m.coreTopFt ? m.coreTopFt.toLocaleString()+" ft" : "—");
+  set("s3d-cape", m.cape!=null ? m.cape+" J/kg" : "—");
+  set("s3d-pg", `${m.precipIn??"—"} in · ${m.gustMph??"—"} mph`);
+}
 
-  $("modal-body").innerHTML=`
-  <div class="s3d-wrap">
-    <div class="s3d-side">
-      <h3>Storm structure</h3>
-      <div style="font-size:10px;color:var(--amber);margin-bottom:8px">${esc(mode.toUpperCase())} · ${esc((data.timeLocal||"").toString())}</div>
-      <div class="s3d-metric"><div class="k">Echo top</div><div class="v">${m.echoTopFt?m.echoTopFt.toLocaleString()+" ft":"—"}</div></div>
-      <div class="s3d-metric"><div class="k">Strongest returns</div><div class="v">${m.maxDbz!=null?m.maxDbz+" dBZ":"—"}</div>
-        <div class="k" style="margin-top:4px">at ${m.maxDbzHeightFt?m.maxDbzHeightFt.toLocaleString()+" ft":"—"}</div></div>
-      <div class="s3d-metric"><div class="k">Heavy core top</div><div class="v">${m.coreTopFt?m.coreTopFt.toLocaleString()+" ft":"—"}</div></div>
-      <div class="s3d-metric"><div class="k">CAPE</div><div class="v">${m.cape!=null?m.cape+" J/kg":"—"}</div></div>
-      <div class="s3d-metric"><div class="k">Precip / Gust</div><div class="v">${m.precipIn??"—"} in · ${m.gustMph??"—"} mph</div></div>
-      <div class="k">Radar strength (dBZ)</div>
-      <div class="s3d-scale"></div>
-      <div class="s3d-scale-lbl"><span>Weaker</span><span>Strongest</span></div>
-      <div style="margin-top:12px"><div class="k" style="margin-bottom:4px">Alerts at point</div>${alerts}</div>
-      <p class="s3d-disclaimer">${esc(data.disclaimer||"")}</p>
-      <button class="btn" style="width:100%;margin-top:8px" onclick="refreshStorm3D()">Refresh volume</button>
-      <button class="btn" style="width:100%" onclick="configureStormWorker()">Set Worker URL</button>
-    </div>
-    <div class="s3d-canvas-wrap" id="s3d-container">
-      <div class="s3d-badge">0 – 60,000 ft · drag orbit auto</div>
-    </div>
-  </div>`;
+async function refreshStorm3DPane(){
+  const box=$("s3d-container");
+  if(!box) return;
+  try{
+    const data=await fetchStorm3D();
+    s3d.data=data;
+    updateStormMetricsUI(data);
+    initStormScene(box, data.metrics||{});
+  }catch(e){
+    updateStormMetricsUI({mode:"error",metrics:{}});
+    console.warn(e);
+  }
+}
+window.refreshStorm3D=refreshStorm3DPane;
 
-  // Allow modal close to dispose
-  const prevClose=window.closeModal;
-  window.closeModal=function(){
-    disposeStorm3D();
-    $("modal").classList.remove("wide");
-    prevClose();
-    window.closeModal=prevClose;
+// Click-to-sample: approximate lat/lon from pixel over Windy iframe (Web Mercator)
+function lonLatFromClick(clientX, clientY, frameEl){
+  const rect=frameEl.getBoundingClientRect();
+  const x=(clientX-rect.left)/rect.width;   // 0..1
+  const y=(clientY-rect.top)/rect.height;
+  // Web Mercator world size at zoom
+  const world=256*Math.pow(2, mapZoom);
+  const sin=Math.sin(sampleLat*Math.PI/180);
+  const cx=(sampleLon+180)/360*world;
+  const cy=(0.5-Math.log((1+sin)/(1-sin))/(4*Math.PI))*world;
+  // Assume iframe shows roughly full width = world/scale; Windy embed is approximate
+  const scale=world / Math.pow(2, mapZoom); // = 256
+  // Use viewport: center of iframe = sampleLat/Lon, width maps to ~360/2^zoom degrees * aspect fudge
+  const degPerPxX = (360 / Math.pow(2, mapZoom)) / rect.width * 1.1;
+  const degPerPxY = (170 / Math.pow(2, mapZoom)) / rect.height * 1.1; // mercator compress
+  const lon = sampleLon + (x-0.5)*rect.width*degPerPxX;
+  const lat = sampleLat - (y-0.5)*rect.height*degPerPxY;
+  return {
+    lat: Math.max(-85, Math.min(85, lat)),
+    lon: ((lon+540)%360)-180
   };
+}
 
-  requestAnimationFrame(()=>{
-    const box=$("s3d-container");
-    if(box && window.THREE) initStormScene(box, m);
-    else if(box) box.innerHTML=`<div class="err" style="padding:20px">Three.js failed to load</div>`;
+function setSampleMode(on){
+  sampleMode=!!on;
+  $("sample-overlay")?.classList.toggle("on", sampleMode);
+  $("sample-hint")?.classList.toggle("on", sampleMode);
+  $("btn-sample")?.classList.toggle("on", sampleMode);
+}
+
+function initStorm3DControls(){
+  $("btn-loc-sepa")?.addEventListener("click", ()=>setSample(PRESETS.sepa.lat, PRESETS.sepa.lon, "sepa"));
+  $("btn-loc-19428")?.addEventListener("click", ()=>setSample(PRESETS.z19428.lat, PRESETS.z19428.lon, "z19428"));
+  $("btn-s3d-refresh")?.addEventListener("click", ()=>refreshStorm3DPane());
+  $("btn-sample")?.addEventListener("click", ()=>setSampleMode(!sampleMode));
+  $("chip-storm3d")?.addEventListener("click", ()=>refreshStorm3DPane());
+
+  const ov=$("sample-overlay");
+  ov?.addEventListener("click", (ev)=>{
+    const frame=$("radar")?.parentElement || ov;
+    const {lat,lon}=lonLatFromClick(ev.clientX, ev.clientY, frame);
+    const pin=$("sample-pin");
+    if(pin){
+      const rect=frame.getBoundingClientRect();
+      pin.style.display="block";
+      pin.style.left=(ev.clientX-rect.left)+"px";
+      pin.style.top=(ev.clientY-rect.top)+"px";
+    }
+    setSampleMode(false);
+    setSample(lat, lon, null);
   });
+}
+
+// Keep modal openStorm3D as optional deep-dive without Worker URL button
+window.openStorm3D=async function(){
+  await refreshStorm3DPane();
+  const data=s3d.data||{};
+  const m=data.metrics||{};
+  openModal("Storm 3D · sample", `
+    <div class="metric-row"><span class="k">Point</span><span class="v">${sampleLat.toFixed(4)}, ${sampleLon.toFixed(4)}</span></div>
+    <div class="metric-row"><span class="k">Mode</span><span class="v">${esc((data.mode||"—").toUpperCase())}</span></div>
+    <div class="metric-row"><span class="k">Echo top</span><span class="v">${m.echoTopFt?m.echoTopFt.toLocaleString()+" ft":"—"}</span></div>
+    <div class="metric-row"><span class="k">Max dBZ</span><span class="v">${m.maxDbz!=null?m.maxDbz+" dBZ":"—"}</span></div>
+    <div class="metric-row"><span class="k">Core top</span><span class="v">${m.coreTopFt?m.coreTopFt.toLocaleString()+" ft":"—"}</span></div>
+    <div class="metric-row"><span class="k">CAPE</span><span class="v">${m.cape!=null?m.cape+" J/kg":"—"}</span></div>
+    <p style="margin-top:10px;font-size:11px;color:var(--text-dim)">${esc(data.disclaimer||"")}</p>
+    <p style="font-size:11px;color:var(--text-dim)">Worker: ${STORM3D_WORKER?esc(STORM3D_WORKER):"client heuristics"}</p>
+  `);
 };
 
-window.refreshStorm3D=function(){ openStorm3D(); };
-
-window.configureStormWorker=function(){
-  const cur=STORM3D_WORKER||"";
-  const v=prompt("Cloudflare Worker base URL (blank = client-only heuristics):\nExample: https://weatherxplr-storm3d.yourname.workers.dev", cur);
-  if(v===null) return;
-  try{ localStorage.setItem("wx_storm3d_worker", v.trim()); }catch(e){}
-  alert("Saved. Reload the page to use the new Worker URL consistently, or click Refresh volume.");
-  location.reload();
-};
-
-// Wire buttons after DOM ready (boot already ran or will run)
-document.addEventListener("DOMContentLoaded",()=>{
-  const b=$("btn-storm3d"); if(b) b.onclick=()=>openStorm3D();
-  const c=$("chip-storm3d"); if(c) c.onclick=()=>openStorm3D();
-});
-// Also bind if boot already past DOMContentLoaded
-setTimeout(()=>{
-  const b=$("btn-storm3d"); if(b&&!b._s3d){b._s3d=1;b.onclick=()=>openStorm3D()}
-  const c=$("chip-storm3d"); if(c&&!c._s3d){c._s3d=1;c.onclick=()=>openStorm3D()}
-},0);
