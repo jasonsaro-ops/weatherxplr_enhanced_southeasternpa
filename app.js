@@ -1,6 +1,15 @@
 const LAT=40.0759,LON=-75.2996,CYCLE=120;
 let sampleLat=40.0759,sampleLon=-75.2996,sampleMode=false,mapZoom=8;
-const PRESETS={sepa:{lat:40.0759,lon:-75.2996,label:"SE-PA"},z19428:{lat:40.0685,lon:-75.3045,label:"19428"}};
+const PRESETS={
+  sepa:{lat:40.0759,lon:-75.2996,label:"SE-PA"},
+  z19428:{lat:40.0685,lon:-75.3045,label:"19428"},
+  phl:{lat:39.8721,lon:-75.2411,label:"KPHL"},
+  nyc:{lat:40.7789,lon:-73.9692,label:"KNYC"},
+  abe:{lat:40.6524,lon:-75.4404,label:"KABE"},
+  acy:{lat:39.4576,lon:-74.5772,label:"KACY"},
+  ilg:{lat:39.6784,lon:-75.6060,label:"KILG"},
+  rdg:{lat:40.3785,lon:-75.9653,label:"KRDG"}
+};
 const GAUGES=[{id:"01472000",name:"Schuylkill @ Reading"},{id:"01473500",name:"Schuylkill @ Pottstown"},{id:"01474500",name:"Schuylkill @ Norriton"},{id:"01474703",name:"Schuylkill @ Conshohocken"},{id:"01474000",name:"Schuylkill @ Fairmount Dam"}];
 const WMO={0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",51:"Light drizzle",61:"Light rain",63:"Rain",65:"Heavy rain",71:"Light snow",80:"Showers",95:"Thunderstorm"};
 let cd=CYCLE,audioOn=false,audioCtx=null,alertCache={},obsCache={},aqiCache={},kphlObs=null,afdFull="";
@@ -308,17 +317,20 @@ const STORM3D_WORKER = (typeof window !== "undefined" && window.STORM3D_WORKER_U
 let s3d = { renderer:null, scene:null, camera:null, cloud:null, anim:null, data:null, _ro:null };
 
 function setSample(lat, lon, presetKey){
-  sampleLat = lat; sampleLon = lon;
+  sampleLat = +lat; sampleLon = +lon;
   const el = $("s3d-loc");
-  if(el) el.textContent = lat.toFixed(4) + "°N " + Math.abs(lon).toFixed(4) + "°W · map center";
-  document.querySelectorAll("#btn-loc-sepa, #btn-loc-19428").forEach(b => b.classList.remove("active"));
-  if(presetKey === "sepa") $("btn-loc-sepa")?.classList.add("active");
-  if(presetKey === "z19428") $("btn-loc-19428")?.classList.add("active");
-  // Map embed recenters on sample — Storm 3D always samples this map center
+  if(el) el.textContent = sampleLat.toFixed(4) + "°N " + Math.abs(sampleLon).toFixed(4) + "°W · sample";
+  const la=$("s3d-lat"), lo=$("s3d-lon");
+  if(la) la.value = sampleLat.toFixed(4);
+  if(lo) lo.value = sampleLon.toFixed(4);
+  document.querySelectorAll("#s3d-presets button").forEach(b=>{
+    b.classList.toggle("active", presetKey && b.dataset.preset===presetKey);
+  });
   const layer = document.querySelector('input[name="ly"]:checked')?.value || "radar";
   setLayer(layer);
   refreshStorm3DPane();
 }
+
 
 
 
@@ -493,8 +505,8 @@ function buildStormCloud(metrics){
 function initStormScene(container, metrics){
   if(!window.THREE || !container) return;
   disposeStorm3D();
-  const w=Math.max(container.clientWidth||300, 100);
-  const h=Math.max(container.clientHeight||200, 100);
+  const w=Math.max(container.clientWidth||300, 120);
+  const h=Math.max(container.clientHeight||200, 160);
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x05070c);
   const camera=new THREE.PerspectiveCamera(42, w/h, 0.1, 100);
@@ -505,6 +517,9 @@ function initStormScene(container, metrics){
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
   container.appendChild(renderer.domElement);
   renderer.domElement.id="s3d-canvas";
+  renderer.domElement.style.width="100%";
+  renderer.domElement.style.height="100%";
+  renderer.domElement.style.display="block";
 
   const boxH=2.4, boxW=1.6;
   const edges=new THREE.EdgesGeometry(new THREE.BoxGeometry(boxW, boxH, boxW));
@@ -571,56 +586,56 @@ async function refreshStorm3DPane(){
 window.refreshStorm3D=refreshStorm3DPane;
 
 // Click-to-sample: approximate lat/lon from pixel over Windy iframe (Web Mercator)
-function lonLatFromClick(clientX, clientY, frameEl){
-  const rect=frameEl.getBoundingClientRect();
-  const x=(clientX-rect.left)/Math.max(rect.width,1);
-  const y=(clientY-rect.top)/Math.max(rect.height,1);
-  const z=mapZoom||8;
-  // Approximate degrees visible at zoom (WebMercator-ish)
-  const lonSpan=360/Math.pow(2,z)* (rect.width/256)*1.15;
-  const latSpan=lonSpan*(rect.height/Math.max(rect.width,1))*0.85;
-  const lon=sampleLon+(x-0.5)*lonSpan;
-  const lat=sampleLat-(y-0.5)*latSpan;
-  return {lat:Math.max(-85,Math.min(85,lat)), lon:((lon+540)%360)-180};
-}
-
-function setSampleMode(on){
-  sampleMode=!!on;
-  const ov=$("sample-overlay");
-  const hint=$("sample-hint");
-  const btn=$("btn-sample");
-  if(ov){ov.classList.toggle("on",sampleMode); ov.style.pointerEvents=sampleMode?"auto":"none";}
-  if(hint)hint.classList.toggle("on",sampleMode);
-  if(btn)btn.classList.toggle("on",sampleMode);
-}
-
 function initStorm3DControls(){
-  $("btn-loc-sepa")?.addEventListener("click", ()=>setSample(PRESETS.sepa.lat, PRESETS.sepa.lon, "sepa"));
-  $("btn-loc-19428")?.addEventListener("click", ()=>setSample(PRESETS.z19428.lat, PRESETS.z19428.lon, "z19428"));
+  document.querySelectorAll("#s3d-presets button").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const key=btn.dataset.preset;
+      const p=PRESETS[key];
+      if(p) setSample(p.lat, p.lon, key);
+    });
+  });
+  $("btn-s3d-go")?.addEventListener("click", ()=>{
+    const lat=parseFloat($("s3d-lat")?.value);
+    const lon=parseFloat($("s3d-lon")?.value);
+    if(Number.isFinite(lat)&&Number.isFinite(lon)) setSample(lat, lon, null);
+  });
+  ["s3d-lat","s3d-lon"].forEach(id=>{
+    $(id)?.addEventListener("keydown", e=>{ if(e.key==="Enter") $("btn-s3d-go")?.click(); });
+  });
+  document.querySelectorAll(".nudge button[data-nudge]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const d=0.25;
+      const n=btn.dataset.nudge;
+      if(n==="n") setSample(sampleLat+d, sampleLon, null);
+      if(n==="s") setSample(sampleLat-d, sampleLon, null);
+      if(n==="e") setSample(sampleLat, sampleLon+d, null);
+      if(n==="w") setSample(sampleLat, sampleLon-d, null);
+      if(n==="0") refreshStorm3DPane();
+    });
+  });
   $("btn-s3d-refresh")?.addEventListener("click", ()=>refreshStorm3DPane());
-  $("btn-sample")?.addEventListener("click", (e)=>{e.preventDefault();e.stopPropagation();setSampleMode(!sampleMode);});
   $("chip-storm3d")?.addEventListener("click", ()=>refreshStorm3DPane());
 
-  const ov=$("sample-overlay");
-  if(ov){
-    ov.style.pointerEvents="none";
-    ov.addEventListener("click", (ev)=>{
-      if(!sampleMode) return;
-      ev.preventDefault();ev.stopPropagation();
-      const frame=$("radar")?.parentElement || ov;
-      const {lat,lon}=lonLatFromClick(ev.clientX, ev.clientY, frame);
-      const pin=$("sample-pin");
-      if(pin){
-        const rect=frame.getBoundingClientRect();
-        pin.style.display="block";
-        pin.style.left=(ev.clientX-rect.left)+"px";
-        pin.style.top=(ev.clientY-rect.top)+"px";
-      }
-      setSampleMode(false);
-      setSample(lat, lon, null);
-    });
+  // Fullscreen / window resize → force 3D canvas resize
+  const forceS3dResize=()=>{
+    const box=$("s3d-container");
+    if(!box||!s3d.renderer||!s3d.camera) return;
+    const nw=box.clientWidth, nh=box.clientHeight;
+    if(nw<20||nh<20) return;
+    s3d.camera.aspect=nw/nh;
+    s3d.camera.updateProjectionMatrix();
+    s3d.renderer.setSize(nw, nh, false);
+    s3d.renderer.render(s3d.scene, s3d.camera);
+  };
+  window.addEventListener("resize", forceS3dResize);
+  document.addEventListener("fullscreenchange", ()=>setTimeout(forceS3dResize, 100));
+  // Observe the pane itself
+  const pane=$("s3d-pane");
+  if(pane && window.ResizeObserver){
+    new ResizeObserver(()=>forceS3dResize()).observe(pane);
   }
 }
+
 
 
 // Keep modal openStorm3D as optional deep-dive without Worker URL button

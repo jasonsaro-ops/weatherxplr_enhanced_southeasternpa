@@ -137,6 +137,21 @@
 @media(max-width:1200px){.stage-split{grid-template-columns:1fr 280px}}
 @media(max-width:900px){.stage-split{grid-template-columns:1fr;grid-template-rows:1fr 280px}.s3d-pane{border-left:none;border-top:1px solid var(--line)}}
 
+
+.s3d-view{flex:1 1 auto;min-height:180px !important;position:relative;background:#05070c}
+.s3d-pane{min-height:0}
+.s3d-sample-form{display:flex;flex-wrap:wrap;gap:4px;padding:0 8px 6px;align-items:center}
+.s3d-sample-form input{width:72px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:3px 5px;font-family:var(--font-mono);font-size:10px}
+.s3d-sample-form button.go{padding:3px 8px;border:1px solid var(--cyan);background:transparent;color:var(--cyan);border-radius:4px;font-family:var(--font-mono);font-size:9px;cursor:pointer}
+.s3d-presets{display:flex;flex-wrap:wrap;gap:3px;padding:0 8px 6px}
+.s3d-presets button{padding:2px 6px;border:1px solid var(--line);background:var(--raise);color:var(--text-mid);border-radius:3px;font-family:var(--font-mono);font-size:8px;cursor:pointer;letter-spacing:.03em}
+.s3d-presets button:hover,.s3d-presets button.active{border-color:var(--cyan);color:var(--cyan)}
+.s3d-presets button.active{background:rgba(59,158,255,.15)}
+.nudge{display:grid;grid-template-columns:20px 20px 20px;grid-template-rows:18px 18px 18px;gap:2px;padding:0 8px 6px;width:fit-content}
+.nudge button{border:1px solid var(--line);background:var(--raise);color:var(--text-mid);border-radius:3px;font-size:9px;cursor:pointer;padding:0}
+.nudge button:hover{border-color:var(--cyan);color:var(--cyan)}
+.nudge .blank{visibility:hidden}
+
 </style>
 </head>
 <body>
@@ -184,14 +199,10 @@
         <div class="model-chip" data-model="thunder">CAPE</div>
       </div>
       <iframe id="radar" title="Radar"></iframe>
-      <div class="sample-overlay" id="sample-overlay" title="Click to sample"></div>
-      <div class="sample-pin" id="sample-pin"></div>
-      <div class="sample-hint" id="sample-hint">CLICK MAP TO SAMPLE LOCATION</div>
-      <div class="map-tools">
+<div class="map-tools">
         <button type="button" class="map-btn" id="btn-layers" title="Layers"><i class="fa-solid fa-layer-group"></i></button>
         <button type="button" class="map-btn" id="btn-home" title="Home"><i class="fa-solid fa-crosshairs"></i></button>
-        <button type="button" class="map-btn" id="btn-sample" title="Click to sample"><i class="fa-solid fa-location-crosshairs"></i></button>
-      </div>
+              </div>
       <div class="layer-pop" id="layer-pop">
         <h4>Radar / Imagery</h4>
         <label class="ly-row"><input type="radio" name="ly" value="radar" checked> Radar mosaic</label>
@@ -218,12 +229,36 @@
       <div class="s3d-pane-hd">
         <h3>Storm 3D</h3>
         <div class="s3d-btns">
-          <button type="button" id="btn-loc-sepa" class="active" title="Southeastern PA">SE-PA</button>
-          <button type="button" id="btn-loc-19428" title="ZIP 19428">19428</button>
           <button type="button" id="btn-s3d-refresh" title="Refresh volume"><i class="fa-solid fa-rotate"></i></button>
         </div>
       </div>
-      <div class="s3d-loc" id="s3d-loc">40.0759°N 75.2996°W · map center</div>
+      <div class="s3d-presets" id="s3d-presets">
+        <button type="button" data-preset="sepa" class="active">SE-PA</button>
+        <button type="button" data-preset="z19428">19428</button>
+        <button type="button" data-preset="phl">KPHL</button>
+        <button type="button" data-preset="nyc">KNYC</button>
+        <button type="button" data-preset="abe">KABE</button>
+        <button type="button" data-preset="acy">KACY</button>
+        <button type="button" data-preset="ilg">KILG</button>
+        <button type="button" data-preset="rdg">KRDG</button>
+      </div>
+      <div class="s3d-sample-form">
+        <input id="s3d-lat" type="text" inputmode="decimal" value="40.0759" title="Latitude"/>
+        <input id="s3d-lon" type="text" inputmode="decimal" value="-75.2996" title="Longitude"/>
+        <button type="button" class="go" id="btn-s3d-go">GO</button>
+      </div>
+      <div class="nudge" title="Nudge sample 0.25°">
+        <span class="blank"></span>
+        <button type="button" data-nudge="n">N</button>
+        <span class="blank"></span>
+        <button type="button" data-nudge="w">W</button>
+        <button type="button" data-nudge="0">·</button>
+        <button type="button" data-nudge="e">E</button>
+        <span class="blank"></span>
+        <button type="button" data-nudge="s">S</button>
+        <span class="blank"></span>
+      </div>
+      <div class="s3d-loc" id="s3d-loc">40.0759°N 75.2996°W · sample</div>
       <div class="s3d-pane-body">
         <div class="s3d-metrics" id="s3d-metrics">
           <div class="row"><span class="k">Mode</span><span class="v" id="s3d-mode">—</span></div>
@@ -262,8 +297,13 @@
       <div class="card-title" style="margin-bottom:2px">Wind mph</div>
       <div class="spark tall" onclick="openDayDetail(0)"><canvas id="c-wind" height="72"></canvas></div>
     </div>
-    <div class="card" onclick="openAQI()"><div class="card-hd"><span class="card-title">Air Quality</span><span class="card-sub" id="aqi-cat">—</span></div><div class="card-val" id="aqi-val">—</div><div class="card-sub">US AQI</div></div>
-    <div class="card" onclick="openTides()"><div class="card-hd"><span class="card-title">Tides 8545240</span><span class="card-sub">NOAA</span></div><div class="metric-row"><span class="k">MLLW</span><span class="v" id="tide-mllw">—</span></div><div class="metric-row"><span class="k">Air</span><span class="v" id="tide-air">—</span></div></div>
+    <div class="card" onclick="openAQI()">
+      <div class="card-hd"><span class="card-title">Air Quality</span><span class="card-sub" id="aqi-cat">—</span></div>
+      <div class="card-val" id="aqi-val">—</div>
+      <div class="card-sub">US AQI · Open-Meteo</div>
+      <div class="metric-row" style="margin-top:6px" onclick="event.stopPropagation();openTides()"><span class="k">Tide MLLW</span><span class="v" id="tide-mllw">—</span></div>
+      <div class="metric-row" onclick="event.stopPropagation();openTides()"><span class="k">Tide air</span><span class="v" id="tide-air">—</span></div>
+    </div>
   </div>
 </aside>
 </div>
