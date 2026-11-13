@@ -373,6 +373,68 @@ async function refreshAll(){
 }
 
 /* ========== Leaflet + Mesonet NEXRAD (clickable) ========== */
+
+/* ========== Radar loop (Mesonet frames) ========== */
+const RADAR_FRAMES = ["m50m","m45m","m40m","m35m","m30m","m25m","m20m","m15m","m10m","m05m",""];
+let radarFrameIdx = RADAR_FRAMES.length - 1;
+let radarPlaying = false;
+let radarTimer = null;
+
+function radarUrl(product, frame){
+  // product: radar | velocity
+  if(product === "velocity"){
+    return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0v${frame ? "-" + frame : ""}-900913/{z}/{x}/{y}.png`;
+  }
+  return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q${frame ? "-" + frame : ""}-900913/{z}/{x}/{y}.png`;
+}
+
+function setRadarFrame(idx){
+  radarFrameIdx = Math.max(0, Math.min(RADAR_FRAMES.length - 1, idx));
+  const frame = RADAR_FRAMES[radarFrameIdx];
+  if(wxLayers.radar){
+    const next = L.tileLayer(radarUrl("radar", frame), { opacity: 0.7, maxZoom: 12, maxNativeZoom: 10 });
+    if(wxMap.hasLayer(wxLayers.radar)){
+      wxMap.removeLayer(wxLayers.radar);
+      next.addTo(wxMap);
+    }
+    wxLayers.radar = next;
+  }
+  const lab = $("radar-age");
+  if(lab) lab.textContent = frame ? frame.replace("m","") + " ago" : "LIVE";
+}
+
+function playRadar(on){
+  radarPlaying = !!on;
+  const btn = $("btn-radar-play");
+  if(btn){
+    btn.classList.toggle("on", radarPlaying);
+    btn.innerHTML = radarPlaying ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+  }
+  if(radarTimer){ clearInterval(radarTimer); radarTimer = null; }
+  if(!radarPlaying) return;
+  radarTimer = setInterval(()=>{
+    let n = radarFrameIdx + 1;
+    if(n >= RADAR_FRAMES.length) n = 0;
+    setRadarFrame(n);
+  }, 700);
+}
+
+function refreshRadarTiles(){
+  // Bust cache / pull latest live frame
+  if(radarPlaying) return; // don't interrupt loop mid-play with live snap every time
+  setRadarFrame(RADAR_FRAMES.length - 1);
+}
+
+function initRadarAnimControls(){
+  $("btn-radar-play")?.addEventListener("click", ()=> playRadar(!radarPlaying));
+  $("btn-radar-live")?.addEventListener("click", ()=>{
+    playRadar(false);
+    setRadarFrame(RADAR_FRAMES.length - 1);
+  });
+  // 2-minute radar refresh
+  setInterval(refreshRadarTiles, 120000);
+}
+
 const RADAR_TILES = {
   radar: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
   velocity: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0v-900913/{z}/{x}/{y}.png",
@@ -393,7 +455,7 @@ function initWxMap(){
     zoom: mapZoom || 8,
     minZoom: 4,
     maxZoom: 12,
-    zoomControl: true,
+    zoomControl: false,
     preferCanvas: true,
   });
   L.tileLayer(
@@ -410,6 +472,7 @@ function initWxMap(){
   wxLayers.satellite = L.tileLayer(RADAR_TILES.satellite, { opacity: 0.5, maxZoom: 12, maxNativeZoom: 10 });
   wxLayers.qpe = L.tileLayer(RADAR_TILES.qpe, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10 });
   wxLayers.radar.addTo(wxMap);
+  L.control.zoom({ position: "bottomleft" }).addTo(wxMap);
 
   sampleMarker = L.circleMarker([sampleLat, sampleLon], {
     radius: 7, color: "#fff", weight: 2, fillColor: "#3b9eff", fillOpacity: 0.95
@@ -465,6 +528,7 @@ function setLayer(layer){
 
 function initRadar(){
   initWxMap();
+  initRadarAnimControls();
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
     document.querySelectorAll(".seg button").forEach(x => x.classList.remove("on"));
     b.classList.add("on");
@@ -620,13 +684,23 @@ async function buildStormClient(lat, lon){
 }
 
 function dbzColor(dbz){
-  if(dbz<5) return 0x1a3a2a;
-  if(dbz<20) return 0x1a9850;
-  if(dbz<30) return 0x91cf60;
-  if(dbz<40) return 0xfee08b;
-  if(dbz<50) return 0xfc8d59;
-  if(dbz<60) return 0xd73027;
-  return 0xc51b7d;
+  // Match common NEXRAD reflectivity palette (approx)
+  if(dbz < 5)  return 0x0a2f1a;
+  if(dbz < 10) return 0x00e400; // light green
+  if(dbz < 20) return 0x00c000;
+  if(dbz < 25) return 0x90f090;
+  if(dbz < 30) return 0xffff00; // yellow
+  if(dbz < 35) return 0xe0e000;
+  if(dbz < 40) return 0xffb000; // orange
+  if(dbz < 45) return 0xff7000;
+  if(dbz < 50) return 0xff0000; // red
+  if(dbz < 55) return 0xd00000;
+  if(dbz < 60) return 0xff00ff; // magenta
+  if(dbz < 65) return 0xcc00cc;
+  return 0xffffff;
+}
+function dbzOpacity(dbz){
+  return Math.min(0.85, 0.12 + (dbz / 70) * 0.7);
 }
 
 function disposeStorm3D(){
@@ -656,76 +730,141 @@ function disposeStorm3D(){
 }
 
 function buildStormCloud(metrics){
-  const group=new THREE.Group();
-  const echo=Math.max(metrics.echoTopFt||0,1);
-  const core=metrics.coreTopFt||echo*0.5;
-  const maxDbz=metrics.maxDbz||0;
-  const maxHt=metrics.maxDbzHeightFt||core*0.4;
-  const rng=(i)=>((Math.sin(i*12.9898)*43758.5453)%1+1)%1; // deterministic pseudo-noise
+  const group = new THREE.Group();
+  const echo = Math.max(metrics.echoTopFt || 0, 1);
+  const core = metrics.coreTopFt || echo * 0.5;
+  const maxDbz = metrics.maxDbz || 0;
+  const maxHt = metrics.maxDbzHeightFt || core * 0.4;
+  const intensity = metrics.intensity || "none";
+  const rng = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
 
-  if(maxDbz<5||echo<1000){
-    const geo=new THREE.SphereGeometry(0.1,10,10);
-    const mat=new THREE.MeshBasicMaterial({color:0x1a9850,transparent:true,opacity:0.1});
-    const m=new THREE.Mesh(geo,mat); m.position.y=0.04; group.add(m);
+  if (maxDbz < 5 || echo < 1000) {
+    const geo = new THREE.SphereGeometry(0.1, 10, 10);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x1a9850, transparent: true, opacity: 0.1 });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = 0.04;
+    group.add(m);
     return group;
   }
 
-  // Irregular stacked lobes with noise offsets (peaks / valleys)
-  const layers=18;
-  for(let i=0;i<layers;i++){
-    const t=i/(layers-1);
-    const hFt=echo*t;
-    let dbz=maxDbz*(1-Math.abs(hFt-maxHt)/Math.max(echo,1));
-    dbz=Math.max(8, dbz);
-    if(hFt>core) dbz*=0.78;
-    if(hFt>echo*0.88) dbz*=0.4;
-    const baseW=0.12+0.55*Math.sin(Math.PI*Math.min(1,t*1.2))*(0.65+0.35*(maxDbz/70));
-    // noise scale for jagged outline
-    const n1=0.75+0.55*rng(i);
-    const n2=0.7+0.6*rng(i+3);
-    const n3=0.8+0.5*rng(i+7);
-    const geo=new THREE.SphereGeometry(Math.max(0.06,baseW),12,10);
-    geo.scale(n1*1.3, 0.35+0.45*rng(i+1), n2*1.25);
-    const mat=new THREE.MeshBasicMaterial({color:dbzColor(dbz),transparent:true,opacity:0.16+0.38*(dbz/70),depthWrite:false});
-    const mesh=new THREE.Mesh(geo,mat);
-    mesh.position.set((rng(i+11)-0.5)*0.35, t*2.2, (rng(i+13)-0.5)*0.35);
-    mesh.rotation.y=rng(i)*Math.PI;
+  // Dense stacked lobes — radar-colored by height / strength
+  const layers = 22;
+  for (let i = 0; i < layers; i++) {
+    const t = i / (layers - 1);
+    const hFt = echo * t;
+    let dbz = maxDbz * (1 - Math.abs(hFt - maxHt) / Math.max(echo, 1));
+    dbz = Math.max(8, dbz);
+    if (hFt > core) dbz *= 0.82;
+    if (hFt > echo * 0.9) dbz *= 0.5;
+    const baseW = 0.1 + 0.58 * Math.sin(Math.PI * Math.min(1, t * 1.15)) * (0.6 + 0.4 * (maxDbz / 70));
+    const geo = new THREE.SphereGeometry(Math.max(0.05, baseW), 14, 12);
+    geo.scale(0.9 + 0.7 * rng(i), 0.3 + 0.5 * rng(i + 1), 0.9 + 0.6 * rng(i + 2));
+    const mat = new THREE.MeshBasicMaterial({
+      color: dbzColor(dbz),
+      transparent: true,
+      opacity: dbzOpacity(dbz),
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set((rng(i + 11) - 0.5) * 0.4, t * 2.25, (rng(i + 13) - 0.5) * 0.4);
+    mesh.userData = { baseY: mesh.position.y, phase: rng(i) * Math.PI * 2, amp: 0.02 + 0.04 * rng(i + 4), spin: 0.2 + rng(i + 5) };
     group.add(mesh);
   }
 
-  // Vertical spikes (updraft towers)
-  const spikes=Math.max(3, Math.round(maxDbz/12));
-  for(let s=0;s<spikes;s++){
-    const h=0.4+1.6*rng(s+20)*(maxDbz/70);
-    const cone=new THREE.ConeGeometry(0.06+0.08*rng(s), h, 6);
-    const dbz=maxDbz*(0.7+0.3*rng(s+2));
-    const mat=new THREE.MeshBasicMaterial({color:dbzColor(dbz),transparent:true,opacity:0.45,depthWrite:false});
-    const mesh=new THREE.Mesh(cone,mat);
-    mesh.position.set((rng(s+30)-0.5)*0.5, h*0.5+0.15, (rng(s+31)-0.5)*0.5);
+  // Vertical rods / updraft towers (color by strength)
+  const rods = Math.max(5, Math.round(maxDbz / 6));
+  for (let s = 0; s < rods; s++) {
+    const h = 0.5 + 1.7 * rng(s + 20) * (maxDbz / 65);
+    const r = 0.04 + 0.07 * rng(s);
+    const geo = new THREE.CylinderGeometry(r * 0.35, r, h, 8);
+    const dbz = maxDbz * (0.65 + 0.35 * rng(s + 2));
+    const mat = new THREE.MeshBasicMaterial({
+      color: dbzColor(dbz),
+      transparent: true,
+      opacity: 0.35 + 0.4 * (dbz / 70),
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set((rng(s + 30) - 0.5) * 0.55, h * 0.5 + 0.08, (rng(s + 31) - 0.5) * 0.55);
+    mesh.userData = { baseY: mesh.position.y, phase: rng(s + 7) * 6, amp: 0.03 + 0.05 * rng(s), pulse: true };
     group.add(mesh);
   }
 
-  // Dense core ellipsoids
-  for(let c=0;c<3;c++){
-    const coreGeo=new THREE.SphereGeometry(0.14+0.12*(maxDbz/70)*rng(c+40), 12, 10);
-    coreGeo.scale(1.4, 0.7, 1.1);
-    const coreMat=new THREE.MeshBasicMaterial({color:dbzColor(maxDbz*(0.85+0.15*rng(c))),transparent:true,opacity:0.5,depthWrite:false});
-    const coreMesh=new THREE.Mesh(coreGeo,coreMat);
-    coreMesh.position.set((rng(c+50)-0.5)*0.2, Math.max(0.2,(maxHt/echo)*2.2*(0.7+0.3*rng(c))), (rng(c+51)-0.5)*0.2);
+  // Pointed cones (peaks)
+  const spikes = Math.max(4, Math.round(maxDbz / 10));
+  for (let s = 0; s < spikes; s++) {
+    const h = 0.35 + 1.4 * rng(s + 40) * (maxDbz / 70);
+    const cone = new THREE.ConeGeometry(0.05 + 0.1 * rng(s), h, 7);
+    const dbz = maxDbz * (0.75 + 0.25 * rng(s + 2));
+    const mat = new THREE.MeshBasicMaterial({
+      color: dbzColor(Math.min(75, dbz + 5)),
+      transparent: true,
+      opacity: 0.5 + 0.3 * (dbz / 70),
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(cone, mat);
+    mesh.position.set((rng(s + 50) - 0.5) * 0.5, h * 0.5 + 0.12, (rng(s + 51) - 0.5) * 0.5);
+    mesh.userData = { baseY: mesh.position.y, phase: rng(s + 9) * 4, amp: 0.04, pulse: true };
+    group.add(mesh);
+  }
+
+  // Hot core(s)
+  for (let c = 0; c < 4; c++) {
+    const coreGeo = new THREE.SphereGeometry(0.12 + 0.14 * (maxDbz / 70) * rng(c + 60), 12, 10);
+    coreGeo.scale(1.3, 0.65, 1.15);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: dbzColor(Math.min(75, maxDbz + 5)),
+      transparent: true,
+      opacity: 0.55 + 0.25 * (maxDbz / 70),
+      depthWrite: false,
+    });
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    coreMesh.position.set(
+      (rng(c + 70) - 0.5) * 0.22,
+      Math.max(0.25, (maxHt / echo) * 2.2 * (0.65 + 0.35 * rng(c))),
+      (rng(c + 71) - 0.5) * 0.22
+    );
+    coreMesh.userData = { baseY: coreMesh.position.y, phase: c, amp: 0.05, pulse: true, core: true };
     group.add(coreMesh);
   }
 
-  // Anvil flare near top if strong
-  if(maxDbz>=45 && echo>25000){
-    const anvil=new THREE.SphereGeometry(0.55, 14, 8);
-    anvil.scale(1.6, 0.22, 1.5);
-    const amat=new THREE.MeshBasicMaterial({color:dbzColor(maxDbz*0.55),transparent:true,opacity:0.28,depthWrite:false});
-    const am=new THREE.Mesh(anvil,amat);
-    am.position.y=2.05;
+  // Anvil / overhang when strong
+  if (maxDbz >= 40 && echo > 20000) {
+    const anvil = new THREE.SphereGeometry(0.65, 16, 10);
+    anvil.scale(1.85, 0.18, 1.6);
+    const amat = new THREE.MeshBasicMaterial({
+      color: dbzColor(maxDbz * 0.55),
+      transparent: true,
+      opacity: 0.32,
+      depthWrite: false,
+    });
+    const am = new THREE.Mesh(anvil, amat);
+    am.position.y = 2.1;
+    am.userData = { baseY: 2.1, phase: 1.2, amp: 0.02 };
     group.add(am);
   }
+
+  // Outer rain shield (greener, lower)
+  for (let i = 0; i < 8; i++) {
+    const geo = new THREE.SphereGeometry(0.2 + 0.25 * rng(i + 90), 10, 8);
+    geo.scale(1.6, 0.35, 1.5);
+    const mat = new THREE.MeshBasicMaterial({
+      color: dbzColor(15 + 10 * rng(i)),
+      transparent: true,
+      opacity: 0.15,
+      depthWrite: false,
+    });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set((rng(i + 100) - 0.5) * 1.1, 0.15 + 0.3 * rng(i), (rng(i + 101) - 0.5) * 1.1);
+    m.userData = { baseY: m.position.y, phase: rng(i), amp: 0.03 };
+    group.add(m);
+  }
+
+  group.userData.intensity = intensity;
+  group.userData.maxDbz = maxDbz;
   return group;
 }
+
 
 function initStormScene(container, metrics){
   if(!window.THREE || !container) return;
@@ -762,13 +901,34 @@ function initStormScene(container, metrics){
   function tick(now){
     s3d.anim=requestAnimationFrame(tick);
     const t=(now-t0)/1000;
-    if(s3d.cloud) s3d.cloud.rotation.y=t*0.15;
-    const r=4.2;
-    camera.position.x=Math.sin(t*0.12)*r;
-    camera.position.z=Math.cos(t*0.12)*r;
-    camera.position.y=1.6+Math.sin(t*0.2)*0.15;
-    camera.lookAt(0,1.0,0);
-    renderer.render(scene,camera);
+    if(s3d.cloud){
+      s3d.cloud.rotation.y = t * 0.18;
+      // Fluxuating peaks / rods / cores
+      s3d.cloud.children.forEach((ch, i) => {
+        const u = ch.userData || {};
+        if (u.baseY != null) {
+          const amp = u.amp || 0.03;
+          const phase = u.phase || i;
+          ch.position.y = u.baseY + Math.sin(t * (u.pulse ? 2.2 : 1.4) + phase) * amp;
+          if (u.pulse) {
+            const s = 1 + 0.08 * Math.sin(t * 3.1 + phase);
+            ch.scale.y = s;
+          }
+          if (u.spin) ch.rotation.y = t * u.spin;
+        }
+        // Subtle opacity shimmer on materials
+        if (ch.material && ch.material.opacity != null && !u.core) {
+          const base = ch.material.userData?.baseOp ?? (ch.material.userData = { baseOp: ch.material.opacity }, ch.material.userData.baseOp);
+          ch.material.opacity = Math.min(0.9, base * (0.85 + 0.2 * Math.sin(t * 2 + i)));
+        }
+      });
+    }
+    const r = 4.3;
+    camera.position.x = Math.sin(t * 0.14) * r;
+    camera.position.z = Math.cos(t * 0.14) * r;
+    camera.position.y = 1.65 + Math.sin(t * 0.22) * 0.2;
+    camera.lookAt(0, 1.05, 0);
+    renderer.render(scene, camera);
   }
   tick(t0);
   const ro=new ResizeObserver(()=>{

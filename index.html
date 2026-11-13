@@ -156,6 +156,29 @@
 .nudge button:hover{border-color:var(--cyan);color:var(--cyan)}
 .nudge .blank{visibility:hidden}
 
+
+.rail.right .rail-body{overflow:hidden;padding:4px 6px;display:flex;flex-direction:column;gap:4px}
+.rail.right .card{padding:6px 8px;margin:0}
+.rail.right .card-title{font-size:9px;margin-bottom:2px}
+.rail.right .card-val{font-size:18px}
+.rail.right .spark{height:48px}
+.rail.right .spark.tall{height:52px}
+.rail.right .fc-table{font-size:10px}
+.rail.right .fc-table th,.rail.right .fc-table td{padding:2px 4px}
+.rail.right .model-grid{gap:4px}
+.rail.right .model-cell{padding:6px 4px}
+.rail.right .m-val{font-size:16px}
+.leaflet-top.leaflet-right{top:auto !important;bottom:28px;right:8px}
+.leaflet-control-zoom{margin:0 !important;border:1px solid var(--line-b)!important;border-radius:6px!important;overflow:hidden}
+.leaflet-control-zoom a{background:rgba(18,21,28,.94)!important;color:var(--text)!important;width:28px!important;height:28px!important;line-height:28px!important;border-bottom:1px solid var(--line)!important}
+.leaflet-control-attribution{font-size:9px!important;background:rgba(10,12,16,.75)!important;max-width:45%}
+.radar-anim{position:absolute;left:10px;bottom:14px;z-index:6;display:flex;align-items:center;gap:6px;background:rgba(18,21,28,.94);border:1px solid var(--line-b);border-radius:6px;padding:4px 8px}
+.radar-anim button{border:1px solid var(--line);background:var(--raise);color:var(--text-mid);border-radius:4px;width:28px;height:24px;cursor:pointer;font-size:11px}
+.radar-anim button.on,.radar-anim button:hover{border-color:var(--cyan);color:var(--cyan)}
+.radar-anim .ra-label{font-family:var(--font-mono);font-size:10px;color:var(--amber);min-width:72px}
+.map-tools{top:10px !important;right:10px !important}
+.model-bar{right:52px !important;max-width:calc(100% - 70px)}
+
 </style>
 </head>
 <body>
@@ -198,6 +221,11 @@
         <div class="model-chip" data-layer="velocity">Velocity</div>
         <div class="model-chip" data-layer="satellite">Sat IR</div>
         <div class="model-chip" data-layer="qpe">QPE</div>
+      </div>
+      <div class="radar-anim" id="radar-anim">
+        <button type="button" id="btn-radar-play" title="Play / Pause loop"><i class="fa-solid fa-play"></i></button>
+        <button type="button" id="btn-radar-live" title="Jump to live">LIVE</button>
+        <span class="ra-label" id="radar-age">LIVE</span>
       </div>
       <div id="wx-map" role="application" aria-label="Radar map"></div>
 <div class="map-tools">
@@ -313,6 +341,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261112c"></script>
+<script src="app.js?v=20261112e"></script>
 </body>
 </html>
