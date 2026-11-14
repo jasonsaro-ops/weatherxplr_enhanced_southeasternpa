@@ -935,6 +935,25 @@ function buildStormCloud(metrics){
 }
 
 
+
+function makeHeightLabel(text, color=0xb8c4d4){
+  const canvas = document.createElement("canvas");
+  canvas.width = 128; canvas.height = 48;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,128,48);
+  ctx.font = "bold 28px IBM Plex Mono, monospace";
+  ctx.fillStyle = "#c5d0e0";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 120, 24);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const spr = new THREE.Sprite(mat);
+  spr.scale.set(0.55, 0.2, 1);
+  return spr;
+}
+
 function initStormScene(container, metrics){
   if(!window.THREE || !container) return;
   disposeStorm3D();
@@ -962,6 +981,31 @@ function initStormScene(container, metrics){
   const floor=new THREE.GridHelper(boxW, 6, 0x2a3140, 0x1e2430);
   floor.position.y=0.01;
   scene.add(floor);
+
+  // Height scale 0–60 kft along left edge of box (y: 0 → boxH)
+  const scaleGroup = new THREE.Group();
+  const maxFt = 60000;
+  const ticks = [0, 10, 20, 30, 40, 50, 60]; // thousands of feet
+  ticks.forEach((k) => {
+    const y = (k * 1000 / maxFt) * boxH;
+    // tick mark
+    const tickGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-boxW/2 - 0.02, y, boxW/2),
+      new THREE.Vector3(-boxW/2 - 0.12, y, boxW/2),
+    ]);
+    const tick = new THREE.Line(tickGeo, new THREE.LineBasicMaterial({ color: 0x6b7a90 }));
+    scaleGroup.add(tick);
+    const lab = makeHeightLabel(k === 0 ? "0" : k + "k");
+    lab.position.set(-boxW/2 - 0.38, y, boxW/2);
+    scaleGroup.add(lab);
+  });
+  // axis caption
+  const cap = makeHeightLabel("kft");
+  cap.position.set(-boxW/2 - 0.38, boxH + 0.12, boxW/2);
+  cap.scale.set(0.45, 0.16, 1);
+  scaleGroup.add(cap);
+  scene.add(scaleGroup);
+
 
   const cloud=buildStormCloud(metrics||{});
   scene.add(cloud);
