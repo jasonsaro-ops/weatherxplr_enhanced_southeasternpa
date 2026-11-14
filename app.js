@@ -401,7 +401,23 @@ window.openAQI=function(){const c=aqiCache.current;if(!c)return;
   <div class="metric-row"><span class="k">Ozone</span><span class="v">${c.ozone??"—"}</span></div>
   <div class="metric-row"><span class="k">NO₂</span><span class="v">${c.nitrogen_dioxide??"—"}</span></div>`)};
 
-function fetchHydro(){setFeed("hydro",true);$("hydro-list").innerHTML=GAUGES.map(g=>`<div class="obs-row" onclick="openHydro('${g.id}','${g.name.replace(/'/g,"\\'")}')"><div><div class="id">${esc(g.name)}</div><div class="nm">USGS ${g.id}</div></div><div class="tv" style="font-size:10px">GRAPH</div></div>`).join("")}
+function fetchHydro(){
+  setFeed("hydro", true);
+  const box = $("hydro-list");
+  if (!box) return;
+  box.innerHTML = GAUGES.map(g => {
+    const short = g.name.replace("Schuylkill @ ", "Sch. ");
+    return '<div class="obs-row" data-id="'+g.id+'"><div><div class="id">'+esc(short)+'</div><div class="nm">'+g.id+'</div></div><div class="tv">↗</div></div>';
+  }).join("");
+  box.querySelectorAll(".obs-row").forEach(el => {
+    el.addEventListener("click", () => {
+      const id = el.getAttribute("data-id");
+      const g = GAUGES.find(x => x.id === id);
+      openHydro(id, g ? g.name : id);
+    });
+  });
+}
+
 window.openHydro=function(id,name){openModal(`USGS · ${name}`,`<div style="height:400px"><iframe src="https://dashboard.waterdata.usgs.gov/api/gwis/2.1/service/site?agencyCode=USGS&siteNumber=${id}&open=plots&banner=false&pad=false" style="width:100%;height:100%;border:none;background:#fff;border-radius:4px"></iframe></div>`)};
 
 async function fetchTides(){

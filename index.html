@@ -213,6 +213,13 @@
 .s3d-chip .cl{font-size:7px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em}
 .s3d-chip .cv{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--cyan)}
 
+.hydro-compact{flex:0 0 auto;max-height:140px;overflow:hidden;margin-top:auto}
+.hydro-compact .card-title{font-size:8px;margin-bottom:3px}
+.hydro-compact .obs-row{padding:3px 5px;margin-bottom:2px}
+.hydro-compact .obs-row .id{font-size:9px}
+.hydro-compact .obs-row .nm{font-size:8px;opacity:.75}
+.hydro-compact .obs-row .tv{font-size:8px}
+.rail.right .rail-body{display:flex;flex-direction:column;min-height:0;overflow:hidden}
 </style>
 </head>
 <body>
@@ -244,7 +251,6 @@
         <div class="metric-row"><span class="k">Precip</span><span class="v" id="m-precip">—</span></div>
       </div>
       <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">Nearest station OBS</div><div id="pt-obs">—</div></div>
-      <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">Hydrology · USGS</div><div id="hydro-list"></div></div>
     </div>
     <div class="pane" id="pane-alerts"><div id="alerts-list"></div></div>
     <div class="pane" id="pane-kphl">
@@ -395,6 +401,10 @@
       <div class="metric-row" style="margin-top:6px" onclick="event.stopPropagation();openTides()"><span class="k">Tide MLLW</span><span class="v" id="tide-mllw">—</span></div>
       <div class="metric-row" onclick="event.stopPropagation();openTides()"><span class="k">Tide air</span><span class="v" id="tide-air">—</span></div>
     </div>
+    <div class="card hydro-compact" style="cursor:default">
+      <div class="card-title">Hydrology · USGS</div>
+      <div id="hydro-list"></div>
+    </div>
   </div>
 </aside>
 </div>
@@ -414,6 +424,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261114e"></script>
+<script src="app.js?v=20261114f"></script>
 </body>
 </html>
