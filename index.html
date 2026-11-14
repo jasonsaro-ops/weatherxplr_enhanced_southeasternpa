@@ -38,7 +38,7 @@
 .rail{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .rail.right{border-right:none;border-left:1px solid var(--line)}
 .seg{display:flex;padding:6px;gap:4px;border-bottom:1px solid var(--line);flex-shrink:0}
-.seg button{flex:1;padding:6px 4px;border:1px solid var(--line);background:var(--raise);color:var(--text-mid);border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.04em;cursor:pointer;text-transform:uppercase}
+.seg button{flex:1;padding:6px 2px;border:1px solid var(--line);background:var(--raise);color:var(--text-mid);border-radius:4px;font-size:9px;font-weight:600;letter-spacing:.02em;cursor:pointer;text-transform:uppercase}
 .seg button.on{background:var(--cyan);color:#0a0c10;border-color:var(--cyan)}
 .rail-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px;min-height:0}.pane{display:none}.pane.on{display:block}
 .card{background:var(--raise);border:1px solid var(--line);border-radius:var(--r);padding:8px;margin-bottom:8px;cursor:pointer;transition:border-color .12s}
@@ -227,9 +227,12 @@
 </header>
 <div class="main">
 <aside class="rail">
-  <div class="seg"><button type="button" class="on" data-pane="cond">Conditions</button><button type="button" data-pane="alerts">Alerts</button><button type="button" data-pane="obs">Obs</button></div>
+  <div class="seg"><button type="button" class="on" data-pane="cond">Point</button><button type="button" data-pane="alerts">Alerts</button><button type="button" data-pane="kphl">KPHL</button><button type="button" data-pane="phi">PHI</button></div>
   <div class="rail-body">
     <div class="pane on" id="pane-cond">
+      <div class="card" style="cursor:default"><div class="card-hd"><span class="card-title">Sample point</span><span class="card-sub" id="pt-coords">—</span></div>
+        <div class="card-sub" id="pt-station">Nearest NWS: —</div>
+      </div>
       <div class="card" onclick="openConditions()"><div class="card-hd"><span class="card-title">Temperature</span><span class="card-sub" id="cond-desc">—</span></div><div class="card-val" id="cond-temp">—<span class="card-unit">°F</span></div><div class="card-sub" id="cond-feels">Feels —</div></div>
       <div class="gauge-grid" id="gauge-grid"></div>
       <div class="card" style="margin-top:8px" onclick="openConditions()">
@@ -240,12 +243,38 @@
         <div class="metric-row"><span class="k">Clouds</span><span class="v" id="m-cloud">—</span></div>
         <div class="metric-row"><span class="k">Precip</span><span class="v" id="m-precip">—</span></div>
       </div>
-      <div class="card" onclick="openKPHL()"><div class="card-hd"><span class="card-title">KPHL</span><span class="card-sub">NWS</span></div><div class="card-val" id="kphl-temp">—<span class="card-unit">°F</span></div><div class="card-sub" id="kphl-desc">Philadelphia Intl</div></div>
+      <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">Nearest station OBS</div><div id="pt-obs">—</div></div>
       <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">Hydrology · USGS</div><div id="hydro-list"></div></div>
     </div>
     <div class="pane" id="pane-alerts"><div id="alerts-list"></div></div>
-    <div class="pane" id="pane-obs"><div id="obs-list"></div></div>
-  </div>
+    <div class="pane" id="pane-kphl">
+      <div class="card" onclick="openKPHL()"><div class="card-hd"><span class="card-title">KPHL</span><span class="card-sub">Philadelphia Intl</span></div>
+        <div class="card-val" id="kphl-temp">—<span class="card-unit">°F</span></div>
+        <div class="card-sub" id="kphl-desc">—</div>
+      </div>
+      <div class="card" style="cursor:default">
+        <div class="metric-row"><span class="k">Wind</span><span class="v" id="kphl-wind">—</span></div>
+        <div class="metric-row"><span class="k">Gust</span><span class="v" id="kphl-gust">—</span></div>
+        <div class="metric-row"><span class="k">Visibility</span><span class="v" id="kphl-vis">—</span></div>
+        <div class="metric-row"><span class="k">Dewpoint</span><span class="v" id="kphl-dew">—</span></div>
+        <div class="metric-row"><span class="k">RH</span><span class="v" id="kphl-rh">—</span></div>
+        <div class="metric-row"><span class="k">Pressure</span><span class="v" id="kphl-pres">—</span></div>
+      </div>
+      <div class="card" style="cursor:default"><div class="card-title">METAR</div><pre id="kphl-metar" style="white-space:pre-wrap;font-size:10px;font-family:var(--font-mono);color:var(--text-mid);margin:0">—</pre></div>
+      <button class="btn" style="width:100%;margin-top:6px" onclick="openAFD()">PHI AFD</button>
+    </div>
+    <div class="pane" id="pane-phi">
+      <div class="card" style="cursor:default"><div class="card-hd"><span class="card-title">NWS Mount Holly</span><span class="card-sub">PHI</span></div>
+        <div class="card-sub" id="phi-office">Weather Forecast Office · Mount Holly, NJ</div>
+      </div>
+      <div class="card" style="cursor:default"><div class="card-title">Active (PHI CWA)</div><div id="phi-alerts">Loading…</div></div>
+      <div class="card" style="cursor:default"><div class="card-title">Area Forecast Discussion</div>
+        <pre id="phi-afd" style="white-space:pre-wrap;font-size:10px;font-family:var(--font-mono);color:var(--text-mid);max-height:220px;overflow:auto;margin:0">—</pre>
+      </div>
+      <button class="btn" style="width:100%;margin-top:6px" onclick="openAFD()">Full AFD modal</button>
+      <button class="btn" style="width:100%;margin-top:4px" onclick="window.open('https://www.weather.gov/phi/','_blank')">weather.gov/phi ↗</button>
+    </div>
+    </div>
 </aside>
 <section class="stage">
   <div class="stage-split">
@@ -340,17 +369,15 @@
 </section>
 
 <aside class="rail right">
-  <div class="right-hd">Forecast · Models</div>
+  <div class="right-hd">Status · Forecast</div>
   <div class="rail-body">
-    <div class="model-panel">
-      <h3>Guidance · SE-PA</h3>
-      <div class="model-grid">
-        <div class="model-cell" onclick="openModels()"><div class="m-name">BLEND</div><div class="m-val" id="mg-blend">—</div></div>
-        <div class="model-cell" onclick="openModels()"><div class="m-name">HRRR</div><div class="m-val" id="mg-hrrr">—</div></div>
-        <div class="model-cell" onclick="openModels()"><div class="m-name">GFS</div><div class="m-val" id="mg-gfs">—</div></div>
-        <div class="model-cell" onclick="openModels()"><div class="m-name">REFS</div><div class="m-val" id="mg-refs">INFO</div></div>
-      </div>
-      <div style="font-size:9px;color:var(--text-dim);margin-top:6px;line-height:1.35">HRRR via Open-Meteo when available. REFS ensemble on NOMADS/AWS.</div>
+    <div class="card" onclick="document.querySelector('.seg button[data-pane=\'kphl\']')?.click()">
+      <div class="card-hd"><span class="card-title">KPHL Status</span><span class="card-sub">NWS</span></div>
+      <div class="card-val" id="kphl-temp-r">—<span class="card-unit">°F</span></div>
+      <div class="card-sub" id="kphl-desc-r">Philadelphia Intl</div>
+      <div class="metric-row" style="margin-top:6px"><span class="k">Wind</span><span class="v" id="kphl-wind-r">—</span></div>
+      <div class="metric-row"><span class="k">Vis</span><span class="v" id="kphl-vis-r">—</span></div>
+      <div class="metric-row"><span class="k">Wx</span><span class="v" id="kphl-wx-r">—</span></div>
     </div>
     <div class="card" style="cursor:default"><div class="card-title" style="margin-bottom:6px">7-Day</div><table class="fc-table" id="fc-daily"><thead><tr><th>Day</th><th>Hi</th><th>Lo</th><th>PoP</th></tr></thead><tbody></tbody></table></div>
     <div class="card" style="cursor:default">
@@ -387,6 +414,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261114d"></script>
+<script src="app.js?v=20261114e"></script>
 </body>
 </html>

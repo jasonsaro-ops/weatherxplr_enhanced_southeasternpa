@@ -74,7 +74,7 @@ function initAudio(){try{audioOn=localStorage.getItem("wx_tones")==="1"}catch(e)
 function syncAudio(){$("btn-audio").classList.toggle("on",audioOn);$("audio-ico").className=audioOn?"fa-solid fa-volume-high":"fa-solid fa-volume-xmark";$("audio-lbl").textContent=audioOn?"ON":"OFF"}
 
 
-function renderModelCards(){if(!omData||!omData.current)return;$("mg-blend").textContent=Math.round(omData.current.temperature_2m)+"°"}
+function renderModelCards(){if(!omData||!omData.current)return;const el=$("mg-blend"); if(el) el.textContent=Math.round(omData.current.temperature_2m)+"°"}
 function renderConditions(){
   const c=omData&&omData.current;if(!c)return;
   $("cond-temp").innerHTML=Math.round(c.temperature_2m)+`<span class="card-unit">°F</span>`;
@@ -150,6 +150,104 @@ function renderSparks(){
   sparkChart("c-temp",labels,temps,"#f5a623","°F");sparkChart("c-pop",labels,pops,"#3b9eff","%");sparkChart("c-wind",labels,winds,"#06b6d4","mph");
 }
 
+
+
+async function fetchPointConditions(){
+  const lat=sampleLat, lon=sampleLon;
+  try{
+    if($("pt-coords")) $("pt-coords").textContent=lat.toFixed(3)+"°, "+lon.toFixed(3)+"°";
+    const u=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+      `&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m`+
+      `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York`;
+    const j=await fetchT(u,{},12000).then(r=>r.json());
+    omData = omData || {};
+    omData.current = j.current;
+    // keep daily/hourly from SE-PA if present for charts
+    renderConditions();
+  }catch(e){console.warn("point OM",e)}
+  // Nearest NWS station
+  try{
+    const headers={Accept:"application/geo+json,application/ld+json","User-Agent":"WeatherXplr/2.0"};
+    const pts=await fetchT(`https://api.weather.gov/points/${lat},${lon}`,{headers},12000).then(r=>r.json());
+    const stUrl=pts.properties&&pts.properties.observationStations;
+    const office=pts.properties&&(pts.properties.cwa||pts.properties.gridId);
+    if($("pt-station")) $("pt-station").textContent="CWA "+(office||"—")+" · nearest NWS stations…";
+    if(!stUrl) return;
+    const st=await fetchT(stUrl,{headers},12000).then(r=>r.json());
+    const stations=(st.features||[]).slice(0,5);
+    const results=await Promise.all(stations.map(s=>{
+      const id=s.properties.stationIdentifier;
+      return fetchT(`https://api.weather.gov/stations/${id}/observations/latest`,{headers},10000)
+        .then(r=>r.json()).then(obs=>({id,name:s.properties.name,obs})).catch(()=>null);
+    }));
+    const list=results.filter(Boolean);
+    const box=$("pt-obs");
+    if(box){
+      if(!list.length) box.innerHTML="<span class='err'>No station OBS</span>";
+      else box.innerHTML=list.map(o=>{
+        const p=o.obs.properties||{};
+        const tC=p.temperature&&p.temperature.value;
+        const tF=tC!=null?Math.round(tC*9/5+32):"—";
+        return `<div class="obs-row"><div><div class="id">${esc(o.id)}</div><div class="nm">${esc((o.name||"").slice(0,40))}</div></div><div class="tv">${tF}°</div></div>`;
+      }).join("");
+      const top=list[0];
+      if(top&&$("pt-station")) $("pt-station").textContent=`Nearest: ${top.id} · CWA ${office||"—"}`;
+    }
+  }catch(e){console.warn("point NWS",e)}
+}
+
+async function fetchPointAlerts(){
+  const lat=sampleLat, lon=sampleLon;
+  try{
+    const headers={Accept:"application/geo+json,application/json","User-Agent":"WeatherXplr/2.0"};
+    const j=await fetchT(`https://api.weather.gov/alerts/active?point=${lat},${lon}`,{headers},12000).then(r=>r.json());
+    const all=j.features||[];
+    alertCache={features:all};
+    all.forEach(f=>{ if(f.id) alertCache[f.id]=f.properties||{}; });
+    const n=all.length;
+    $("chip-alerts").textContent="ALERTS "+n;
+    $("chip-alerts").classList.toggle("hot",n>0);
+    const list=$("alerts-list");
+    if(list){
+      if(!all.length) list.innerHTML='<span class="err" style="color:var(--text-dim)">No active alerts at sample point</span>';
+      else {
+        list.innerHTML=all.slice(0,40).map(f=>{
+          const p=f.properties||{};
+          const id=esc(f.id||"");
+          return `<div class="alert-item ${sevClass(p.severity)}" data-id="${id}" role="button" tabindex="0">
+            <div class="ev">${esc(p.event||"Alert")}</div>
+            <div class="hd">${esc(p.headline||p.areaDesc||"")}</div>
+          </div>`;
+        }).join("");
+        list.querySelectorAll(".alert-item").forEach(el=>{
+          el.addEventListener("click",()=>openAlert(el.getAttribute("data-id")));
+        });
+      }
+    }
+    setFeed("nws",true);
+  }catch(e){console.warn(e);setFeed("nws",false)}
+}
+
+async function fetchPhiAlerts(){
+  try{
+    const headers={Accept:"application/geo+json","User-Agent":"WeatherXplr/2.0"};
+    // PHI office zone alerts via area NJ/PA near mount holly - use active?office=PHI if supported
+    let j;
+    try{
+      j=await fetchT("https://api.weather.gov/alerts/active?office=PHI",{headers},12000).then(r=>r.json());
+    }catch(e){
+      j=await fetchT("https://api.weather.gov/alerts/active?area=NJ",{headers},12000).then(r=>r.json());
+    }
+    const all=(j.features||[]).slice(0,25);
+    const box=$("phi-alerts");
+    if(!box) return;
+    if(!all.length) box.innerHTML='<span class="err" style="color:var(--text-dim)">No PHI office alerts</span>';
+    else box.innerHTML=all.map(f=>{
+      const p=f.properties||{};
+      return `<div class="alert-item ${sevClass(p.severity)}" style="margin-bottom:4px"><div class="ev">${esc(p.event||"")}</div><div class="hd">${esc((p.headline||"").slice(0,120))}</div></div>`;
+    }).join("");
+  }catch(e){console.warn("phi alerts",e)}
+}
 
 async function fetchOpenMeteo(){
   try{
@@ -330,16 +428,43 @@ async function fetchKPHL(){
     kphlObs=obs.properties||{};
     const p=kphlObs;
     const tC=p.temperature&&p.temperature.value;
-    $("kphl-temp").innerHTML=(tC!=null?Math.round(tC*9/5+32):"—")+`<span class="card-unit">°F</span>`;
-    $("kphl-desc").textContent=p.textDescription||"Philadelphia Intl";
+    const tF=tC!=null?Math.round(tC*9/5+32):"—";
+    const setHtml=(id,html)=>{const e=$(id); if(e) e.innerHTML=html};
+    const setTxt=(id,t)=>{const e=$(id); if(e) e.textContent=t};
+    setHtml("kphl-temp", tF+`<span class="card-unit">°F</span>`);
+    setHtml("kphl-temp-r", tF+`<span class="card-unit">°F</span>`);
+    setTxt("kphl-desc", p.textDescription||"Philadelphia Intl");
+    setTxt("kphl-desc-r", p.textDescription||"Philadelphia Intl");
+    setTxt("kphl-wx-r", p.textDescription||"—");
+    const wC=p.windSpeed&&p.windSpeed.value;
+    const wD=p.windDirection&&p.windDirection.value;
+    const wMph=wC!=null?Math.round(wC*2.23694):null;
+    const gustC=p.windGust&&p.windGust.value;
+    const gustMph=gustC!=null?Math.round(gustC*2.23694):null;
+    setTxt("kphl-wind", wMph!=null?`${wMph} mph · ${wD??"—"}°`:"—");
+    setTxt("kphl-wind-r", wMph!=null?`${wMph} mph`:"—");
+    setTxt("kphl-gust", gustMph!=null?gustMph+" mph":"—");
+    const vis=p.visibility&&p.visibility.value;
+    const visMi=vis!=null?(vis/1609.34).toFixed(1)+" mi":"—";
+    setTxt("kphl-vis", visMi);
+    setTxt("kphl-vis-r", visMi);
+    const dew=p.dewpoint&&p.dewpoint.value;
+    setTxt("kphl-dew", dew!=null?Math.round(dew*9/5+32)+"°F":"—");
+    const rh=p.relativeHumidity&&p.relativeHumidity.value;
+    setTxt("kphl-rh", rh!=null?Math.round(rh)+"%":"—");
+    const pr=p.barometricPressure&&p.barometricPressure.value;
+    setTxt("kphl-pres", pr!=null?Math.round(pr/100)+" hPa":"—");
+    setTxt("kphl-metar", p.rawMessage||"—");
     try{
       const list=await fetchT("https://api.weather.gov/products/types/AFD/locations/PHI",{headers},12000).then(r=>r.json());
       const g=list["@graph"]||[];
       if(g.length){
         const prod=await fetchT(g[0]["@id"]||`https://api.weather.gov/products/${g[0].id}`,{headers},12000).then(r=>r.json());
         afdFull=prod.productText||"";
+        if($("phi-afd")) $("phi-afd").textContent=(afdFull||"").slice(0,2500)+(afdFull&&afdFull.length>2500?"…":"");
       }
     }catch(e){}
+    fetchPhiAlerts().catch(()=>{});
   }catch(e){console.warn("KPHL",e)}
 }
 window.openKPHL=function(){const p=kphlObs||{};const tF=p.temperature&&p.temperature.value!=null?((p.temperature.value*9/5)+32).toFixed(1):"—";
@@ -372,8 +497,8 @@ window.openModels=function(){
 async function refreshAll(){
   await Promise.allSettled([
     fetchOpenMeteo().catch(e=>console.warn(e)),
-    fetchAlerts().catch(e=>console.warn(e)),
-    fetchObs().catch(e=>console.warn(e)),
+    fetchPointConditions().catch(e=>console.warn(e)),
+    fetchPointAlerts().catch(e=>console.warn(e)),
     fetchAQI().catch(e=>console.warn(e)),
     fetchTides().catch(e=>console.warn(e)),
     fetchKPHL().catch(e=>console.warn(e)),
@@ -626,6 +751,8 @@ function setSample(lat, lon, presetKey){
   }
   const m=$("s3d-mode"); if(m) m.textContent="LOADING…";
   refreshStorm3DPane();
+  fetchPointConditions().catch(()=>{});
+  fetchPointAlerts().catch(()=>{});
 }
 
 
