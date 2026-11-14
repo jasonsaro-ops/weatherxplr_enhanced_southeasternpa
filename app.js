@@ -612,7 +612,7 @@ let s3d = { renderer:null, scene:null, camera:null, cloud:null, anim:null, data:
 function setSample(lat, lon, presetKey){
   sampleLat = +lat; sampleLon = +lon;
   const el = $("s3d-loc");
-  if(el) el.textContent = sampleLat.toFixed(4) + "°N " + Math.abs(sampleLon).toFixed(4) + "°W · point sample (0 mi)";
+  if(el) el.textContent = sampleLat.toFixed(4) + "°N " + Math.abs(sampleLon).toFixed(4) + "°W · sample";
   const la=$("s3d-lat"), lo=$("s3d-lon");
   if(la) la.value = sampleLat.toFixed(4);
   if(lo) lo.value = sampleLon.toFixed(4);
@@ -635,82 +635,120 @@ function setSample(lat, lon, presetKey){
 
 async function fetchStorm3D(){
   const lat = sampleLat, lon = sampleLon;
-  if(STORM3D_WORKER){
-    try{
-      const r = await fetch(`${STORM3D_WORKER.replace(/\/$/,"")}?lat=${lat}&lon=${lon}`);
-      if(r.ok) return await r.json();
-    }catch(e){ console.warn("Storm3D worker failed", e); }
+  // Client neighborhood sample is primary (catches cells models miss on exact gridpoint)
+  try{
+    return await buildStormClient(lat, lon);
+  }catch(e){
+    console.warn("Storm3D client failed", e);
+    if(STORM3D_WORKER){
+      try{
+        const r = await fetch(`${STORM3D_WORKER.replace(/\/$/,"")}?lat=${lat}&lon=${lon}`);
+        if(r.ok) return await r.json();
+      }catch(err){ console.warn(err); }
+    }
+    throw e;
   }
-  return buildStormClient(lat, lon);
 }
 
 async function buildStormClient(lat, lon){
-  let cape=0, precip=0, code=0, gust=0, severe=[];
+  // Sample click point + 4 neighbors (~0.08° ≈ 5–7 mi) so thin model grids don't miss cells under radar
+  const offs = [[0,0],[0.08,0],[-0.08,0],[0,0.08],[0,-0.08]];
+  let best = {cape:0, precip:0, code:0, gust:0, lat, lon};
   try{
-    const u=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=precipitation,weather_code,wind_gusts_10m,cape&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York`;
-    const j=await fetchT(u,{},12000).then(r=>r.json());
-    const c=j.current||{};
-    precip=c.precipitation||0; code=c.weather_code||0; gust=c.wind_gusts_10m||0; cape=c.cape||0;
-  }catch(e){}
+    const reqs = offs.map(([dlat,dlon])=>{
+      const la = lat+dlat, lo = lon+dlon;
+      const u = `https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}`+
+        `&current=precipitation,rain,showers,weather_code,wind_gusts_10m,cape`+
+        `&hourly=precipitation,rain,showers,weather_code,cape`+
+        `&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York&forecast_days=1`;
+      return fetchT(u,{},12000).then(r=>r.json()).then(j=>{
+        const c=j.current||{};
+        const h=j.hourly||{};
+        let precip = Math.max(c.precipitation||0, c.rain||0, c.showers||0);
+        let cape = c.cape||0;
+        let code = c.weather_code||0;
+        let gust = c.wind_gusts_10m||0;
+        // current hour + previous 2 hours from hourly series
+        if(h.time && h.time.length){
+          const now = Date.now();
+          for(let i=0;i<h.time.length;i++){
+            const t = new Date(h.time[i]).getTime();
+            if(t > now+3600000 || t < now-3*3600000) continue;
+            precip = Math.max(precip, h.precipitation?.[i]||0, h.rain?.[i]||0, h.showers?.[i]||0);
+            cape = Math.max(cape, h.cape?.[i]||0);
+            if(h.weather_code?.[i]!=null) code = Math.max(code, h.weather_code[i]);
+          }
+        }
+        return {cape, precip, code, gust, lat:la, lon:lo};
+      }).catch(()=>null);
+    });
+    const results = (await Promise.all(reqs)).filter(Boolean);
+    results.forEach(r=>{
+      const score = r.precip*100 + r.cape/50 + (r.code>=61?20:0);
+      const bestScore = best.precip*100 + best.cape/50 + (best.code>=61?20:0);
+      if(score >= bestScore) best = r;
+    });
+  }catch(e){ console.warn("OM neighborhood", e); }
+
+  let cape=best.cape, precip=best.precip, code=best.code, gust=best.gust;
+  let severe=[];
   try{
     const j=await fetchT(`https://api.weather.gov/alerts/active?point=${lat},${lon}`,{headers:{Accept:"application/geo+json","User-Agent":"WeatherXplr/2.0"}},12000).then(r=>r.json());
     severe=(j.features||[]).map(f=>f.properties||{}).filter(p=>{
       const s=(p.severity||"").toLowerCase();
-      return s==="extreme"||s==="severe"||/thunder|tornado|funnel|severe/i.test(p.event||"");
+      return s==="extreme"||s==="severe"||/thunder|tornado|funnel|severe|flash flood/i.test(p.event||"");
     }).slice(0,5).map(p=>({event:p.event,severity:p.severity,headline:p.headline}));
   }catch(e){}
 
-  // POINT SAMPLE ONLY — no search radius. Require real precip / convective code / severe alert at this lat/lon.
   let echoTop=0,maxDbz=0,maxDbzHt=0,coreTop=0,intensity="none";
   const hasTstorm=code>=95||severe.length>0;
-  const raining=precip>=0.05||(code>=61&&code<=67)||(code>=80&&code<=82)||code===65||code===63;
-  const convective=hasTstorm||cape>=800||code>=95;
+  const raining=precip>=0.02||(code>=51&&code<=67)||(code>=80&&code<=82);
+  const convective=hasTstorm||cape>=400||code>=95;
 
   if(raining && !convective){
-    // Stratiform rain only — shallow volume, modest dBZ
     intensity="weak";
-    maxDbz=22+Math.min(18, precip*50);
-    echoTop=8000+Math.min(10000, precip*12000);
-    maxDbzHt=3000+Math.min(4000,precip*5000);
-    coreTop=echoTop*0.4;
+    maxDbz=25+Math.min(20, precip*60);
+    echoTop=10000+Math.min(12000, precip*15000);
+    maxDbzHt=3500+Math.min(5000,precip*6000);
+    coreTop=echoTop*0.42;
   }
-  if(convective||(raining&&cape>=500)){
+  if(convective||(raining&&cape>=300)){
     intensity="weak";
-    maxDbz=Math.max(maxDbz, 35+Math.min(20,cape/100+precip*25));
-    echoTop=Math.max(echoTop, 16000+Math.min(20000,cape*10));
+    maxDbz=Math.max(maxDbz, 35+Math.min(22,cape/90+precip*30));
+    echoTop=Math.max(echoTop, 16000+Math.min(22000,cape*10));
     maxDbzHt=Math.max(maxDbzHt, 5000+Math.min(8000,cape*2));
     coreTop=echoTop*0.55;
   }
-  if(cape>1500||code>=95||severe.some(a=>/tornado|severe thunder/i.test(a.event||""))){
+  if(cape>1200||code>=95||severe.some(a=>/tornado|severe thunder/i.test(a.event||""))){
     intensity="moderate";
     maxDbz=50+Math.min(15,cape/200);
     echoTop=28000+Math.min(18000,cape*8);
     maxDbzHt=7000+Math.min(10000,cape*2);
     coreTop=echoTop*0.65;
   }
-  if(cape>2500||severe.some(a=>/tornado/i.test(a.event||""))){
+  if(cape>2200||severe.some(a=>/tornado/i.test(a.event||""))){
     intensity="strong";
     maxDbz=Math.min(72,58+cape/500);
     echoTop=Math.min(55000,38000+cape*5);
     maxDbzHt=9000+Math.min(12000,cape*2);
     coreTop=echoTop*0.72;
   }
-  // Hard clear: no meaningful precip, no convection, no severe alert at this point
-  if(!raining && !hasTstorm && cape<500 && precip<0.05){
+  if(!raining && !hasTstorm && cape<300 && precip<0.02){
     echoTop=0; maxDbz=0; maxDbzHt=0; coreTop=0; intensity="none";
   }
 
+  const radiusMi = 7;
   return{
     ok:true,
     mode:intensity==="none"?"clear":"estimated",
-    disclaimer:"Point sample only (0 mi radius) at selected lat/lon — Open-Meteo + NWS at that coordinate. Not Level-II volume. Distant radar echoes are ignored.",
+    disclaimer:`Local max within ~${radiusMi} mi of click (5 Open-Meteo points + NWS at click). Not Level-II measured volume — radar mosaic may still show echoes the model underplays.`,
     location:{lat,lon},
-    radiusMi:0,
+    radiusMi,
     time:new Date().toISOString(),
     timeLocal:new Date().toLocaleString("en-US",{timeZone:"America/New_York"}),
     metrics:{echoTopFt:Math.round(echoTop),maxDbz:Math.round(maxDbz*10)/10,maxDbzHeightFt:Math.round(maxDbzHt),coreTopFt:Math.round(coreTop),intensity,cape:Math.round(cape),precipIn:Math.round(precip*100)/100,weatherCode:code,gustMph:Math.round(gust)},
     alerts:severe,
-    source:{meteo:"Open-Meteo",alerts:"api.weather.gov",path:"client",sample:"point"}
+    source:{meteo:"Open-Meteo",alerts:"api.weather.gov",path:"client",sample:`local-max-${radiusMi}mi`}
   };
 }
 
