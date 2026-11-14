@@ -195,6 +195,24 @@
 .leaflet-control-attribution{right:8px;left:auto !important;margin:0 0 8px 0 !important;max-width:40%}
 .time-strip{z-index:4}
 
+
+.s3d-metrics{font-size:9px !important;padding:4px 6px !important}
+.s3d-metrics .row{padding:2px 0 !important}
+.s3d-metrics .k{font-size:8px !important;letter-spacing:.04em;text-transform:uppercase}
+.s3d-metrics .v{font-size:10px !important;font-weight:600}
+.s3d-meters{padding:4px 6px 6px;border-bottom:1px solid var(--line);flex-shrink:0}
+.s3d-meter{margin-bottom:5px}
+.s3d-meter:last-child{margin-bottom:0}
+.s3d-meter .mh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+.s3d-meter .ml{font-size:8px;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase}
+.s3d-meter .mv{font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--text)}
+.s3d-bar{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.s3d-bar > i{display:block;height:100%;border-radius:2px;width:0;transition:width .4s ease,background .3s}
+.s3d-wx{display:flex;flex-wrap:wrap;gap:4px;padding:4px 6px 6px;border-bottom:1px solid var(--line)}
+.s3d-chip{flex:1 1 40%;min-width:70px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 6px}
+.s3d-chip .cl{font-size:7px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em}
+.s3d-chip .cv{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--cyan)}
+
 </style>
 </head>
 <body>
@@ -302,6 +320,18 @@
           <div class="row"><span class="k">CAPE</span><span class="v" id="s3d-cape">—</span></div>
           <div class="row"><span class="k">Precip / Gust</span><span class="v" id="s3d-pg">—</span></div>
         </div>
+        <div class="s3d-meters" id="s3d-meters">
+          <div class="s3d-meter"><div class="mh"><span class="ml">CAPE</span><span class="mv" id="m-cape">—</span></div><div class="s3d-bar"><i id="bar-cape"></i></div></div>
+          <div class="s3d-meter"><div class="mh"><span class="ml">Echo top</span><span class="mv" id="m-echo">—</span></div><div class="s3d-bar"><i id="bar-echo"></i></div></div>
+          <div class="s3d-meter"><div class="mh"><span class="ml">Max dBZ</span><span class="mv" id="m-dbz">—</span></div><div class="s3d-bar"><i id="bar-dbz"></i></div></div>
+          <div class="s3d-meter"><div class="mh"><span class="ml">Intensity</span><span class="mv" id="m-int">—</span></div><div class="s3d-bar"><i id="bar-int"></i></div></div>
+        </div>
+        <div class="s3d-wx" id="s3d-wx">
+          <div class="s3d-chip"><div class="cl">Weather</div><div class="cv" id="wx-code">—</div></div>
+          <div class="s3d-chip"><div class="cl">Instability</div><div class="cv" id="wx-inst">—</div></div>
+          <div class="s3d-chip"><div class="cl">Precip</div><div class="cv" id="wx-pcp">—</div></div>
+          <div class="s3d-chip"><div class="cl">Gust</div><div class="cv" id="wx-gst">—</div></div>
+        </div>
         <div class="s3d-view" id="s3d-container"></div>
       </div>
     </aside>
@@ -357,6 +387,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261114c"></script>
+<script src="app.js?v=20261114d"></script>
 </body>
 </html>

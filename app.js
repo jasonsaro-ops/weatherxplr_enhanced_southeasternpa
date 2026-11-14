@@ -817,7 +817,7 @@ function buildStormCloud(metrics){
   }
 
   // Dense stacked lobes — radar-colored by height / strength
-  const layers = 22;
+  const layers = 28;
   for (let i = 0; i < layers; i++) {
     const t = i / (layers - 1);
     const hFt = echo * t;
@@ -841,7 +841,7 @@ function buildStormCloud(metrics){
   }
 
   // Vertical rods / updraft towers (color by strength)
-  const rods = Math.max(5, Math.round(maxDbz / 6));
+  const rods = Math.max(8, Math.round(maxDbz / 4));
   for (let s = 0; s < rods; s++) {
     const h = 0.5 + 1.7 * rng(s + 20) * (maxDbz / 65);
     const r = 0.04 + 0.07 * rng(s);
@@ -860,7 +860,7 @@ function buildStormCloud(metrics){
   }
 
   // Pointed cones (peaks)
-  const spikes = Math.max(4, Math.round(maxDbz / 10));
+  const spikes = Math.max(8, Math.round(maxDbz / 6));
   for (let s = 0; s < spikes; s++) {
     const h = 0.35 + 1.4 * rng(s + 40) * (maxDbz / 70);
     const cone = new THREE.ConeGeometry(0.05 + 0.1 * rng(s), h, 7);
@@ -878,7 +878,7 @@ function buildStormCloud(metrics){
   }
 
   // Hot core(s)
-  for (let c = 0; c < 4; c++) {
+  for (let c = 0; c < 6; c++) {
     const coreGeo = new THREE.SphereGeometry(0.12 + 0.14 * (maxDbz / 70) * rng(c + 60), 12, 10);
     coreGeo.scale(1.3, 0.65, 1.15);
     const coreMat = new THREE.MeshBasicMaterial({
@@ -914,7 +914,7 @@ function buildStormCloud(metrics){
   }
 
   // Outer rain shield (greener, lower)
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     const geo = new THREE.SphereGeometry(0.2 + 0.25 * rng(i + 90), 10, 8);
     geo.scale(1.6, 0.35, 1.5);
     const mat = new THREE.MeshBasicMaterial({
@@ -941,7 +941,7 @@ function makeHeightLabel(text, color=0xb8c4d4){
   canvas.width = 128; canvas.height = 48;
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0,0,128,48);
-  ctx.font = "bold 28px IBM Plex Mono, monospace";
+  ctx.font = "bold 22px IBM Plex Mono, monospace";
   ctx.fillStyle = "#c5d0e0";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -950,7 +950,7 @@ function makeHeightLabel(text, color=0xb8c4d4){
   tex.needsUpdate = true;
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
   const spr = new THREE.Sprite(mat);
-  spr.scale.set(0.55, 0.2, 1);
+  spr.scale.set(0.42, 0.15, 1);
   return spr;
 }
 
@@ -1070,9 +1070,38 @@ function updateStormMetricsUI(data){
   if(loc && data){
     const r = data.radiusMi!=null ? data.radiusMi : 0;
     const base = sampleLat.toFixed(4)+"°N "+Math.abs(sampleLon).toFixed(4)+"°W";
-    loc.textContent = r>0 ? `${base} · radius ${r} mi` : `${base} · point sample (0 mi)`;
+    loc.textContent = r>0 ? `${base} · radius ${r} mi` : `${base} · point sample`;
   }
+  // Graphical meters
+  const cape=m.cape||0, echo=m.echoTopFt||0, dbz=m.maxDbz||0;
+  const intMap={none:0,weak:33,moderate:66,strong:100};
+  const intPct=intMap[(m.intensity||"none")]??0;
+  const setBar=(id,pct,color)=>{
+    const el=$(id); if(!el) return;
+    el.style.width=Math.max(0,Math.min(100,pct))+"%";
+    el.style.background=color;
+  };
+  set("m-cape", cape?cape+" J/kg":"—");
+  setBar("bar-cape", Math.min(100, cape/30), cape>2000?"#ef4444":cape>1000?"#f97316":cape>400?"#eab308":"#3b9eff");
+  set("m-echo", echo?Math.round(echo/1000)+"k ft":"—");
+  setBar("bar-echo", Math.min(100, echo/600), echo>35000?"#ef4444":echo>20000?"#f97316":"#06b6d4");
+  set("m-dbz", dbz?dbz+" dBZ":"—");
+  setBar("bar-dbz", Math.min(100, dbz/0.75), dbz>=50?"#ef4444":dbz>=35?"#f97316":dbz>=20?"#eab308":"#2ecc71");
+  set("m-int", (m.intensity||"none").toUpperCase());
+  setBar("bar-int", intPct, intPct>=66?"#ef4444":intPct>=33?"#f97316":intPct>0?"#eab308":"#3a4458");
+  // Weather chips
+  const WX={0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",51:"Drizzle",61:"Rain",63:"Rain",65:"Heavy rain",71:"Snow",80:"Showers",81:"Showers",82:"Heavy showers",95:"Thunderstorm",96:"T-storm hail",99:"Severe T-storm"};
+  set("wx-code", WX[m.weatherCode]||(m.weatherCode!=null?("Code "+m.weatherCode):"—"));
+  let inst="Stable";
+  if(cape>=2500) inst="Extreme";
+  else if(cape>=1500) inst="High";
+  else if(cape>=500) inst="Moderate";
+  else if(cape>=100) inst="Weak";
+  set("wx-inst", inst);
+  set("wx-pcp", m.precipIn!=null?(m.precipIn+" in"):"—");
+  set("wx-gst", m.gustMph!=null?(m.gustMph+" mph"):"—");
 }
+
 
 async function refreshStorm3DPane(){
   const box=$("s3d-container");
