@@ -58,7 +58,7 @@ async function buildStorm(lat, lon) {
   let maxDbzHt = 0;
   let coreTop = 0;
   let intensity = "none";
-  const raining = precip >= 0.01 || (code >= 51 && code < 90) || code === 80;
+  const raining = precip >= 0.05 || (code >= 61 && code <= 67) || (code >= 80 && code <= 82);
 
   if (raining || cape > 200) {
     intensity = "weak";
@@ -90,14 +90,15 @@ async function buildStorm(lat, lon) {
   }
   if (precip > 0.3) maxDbz = Math.min(75, maxDbz + 8);
   if (gust > 40) coreTop = Math.min(echoTop * 0.85, coreTop + 3000);
-  if (!raining && !hasTstorm && cape < 200 && precip < 0.01) {
+  if (!raining && !hasTstorm && cape < 500 && precip < 0.05) {
     echoTop = 0; maxDbz = 0; maxDbzHt = 0; coreTop = 0; intensity = "none";
   }
 
   return {
     ok: true,
     mode: intensity === "none" ? "clear" : "estimated",
-    disclaimer:
+    disclaimer: "Point sample only (0 mi radius). ",
+    // disclaimer:
       "Structure is estimated from public Open-Meteo CAPE/precip and NWS alerts — not NEXRAD Level-II measured volume. For true volumetric radar use commercial products (e.g. 4070 Storm 3D).",
     location: { lat, lon },
     time: now.toISOString(),

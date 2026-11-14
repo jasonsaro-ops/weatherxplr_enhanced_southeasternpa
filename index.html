@@ -187,6 +187,14 @@
 .map-tools{top:10px !important;right:10px !important}
 .model-bar{right:52px !important;max-width:calc(100% - 70px)}
 
+
+/* Map control layout — no overlap */
+.radar-anim{left:52px !important;bottom:12px !important;z-index:7}
+.leaflet-bottom.leaflet-left{bottom:10px !important;left:8px !important;z-index:6}
+.leaflet-control-zoom{margin-bottom:0 !important;margin-left:0 !important}
+.leaflet-control-attribution{right:8px;left:auto !important;margin:0 0 8px 0 !important;max-width:40%}
+.time-strip{z-index:4}
+
 </style>
 </head>
 <body>
@@ -349,6 +357,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261113a"></script>
+<script src="app.js?v=20261114a"></script>
 </body>
 </html>
