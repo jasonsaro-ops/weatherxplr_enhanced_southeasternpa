@@ -97,9 +97,7 @@ async function buildStorm(lat, lon) {
   return {
     ok: true,
     mode: intensity === "none" ? "clear" : "estimated",
-    disclaimer: "Point sample only (0 mi radius). ",
-    // disclaimer:
-      "Structure is estimated from public Open-Meteo CAPE/precip and NWS alerts — not NEXRAD Level-II measured volume. For true volumetric radar use commercial products (e.g. 4070 Storm 3D).",
+    disclaimer: "Point sample only (0 mi radius). Structure estimated from Open-Meteo CAPE/precip and NWS alerts — not NEXRAD Level-II measured volume.",
     location: { lat, lon },
     time: now.toISOString(),
     timeLocal: now.toLocaleString("en-US", { timeZone: "America/New_York" }),
