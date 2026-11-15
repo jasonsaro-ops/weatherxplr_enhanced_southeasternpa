@@ -220,13 +220,14 @@
 .hydro-compact .obs-row .nm{font-size:8px;opacity:.75}
 .hydro-compact .obs-row .tv{font-size:8px}
 .rail.right .rail-body{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#brand-home:hover{opacity:.85}.brand-mark{box-shadow:0 0 10px rgba(59,158,255,.45)}
 </style>
 </head>
 <body>
 <div id="boot"><div class="boot-box"><div class="boot-logo"><i class="fa-solid fa-satellite-dish"></i></div><div class="boot-title">WEATHERXPLR</div><div class="boot-sub">SE-PA DISPATCH · PHI CWA</div><div class="boot-bar"><div class="boot-prog" id="boot-prog"></div></div><div class="boot-st" id="boot-st">INITIALIZING…</div></div></div>
 <div id="app">
 <header class="top">
-  <div class="brand"><div class="brand-mark"></div><div><div class="brand-name">WEATHERXPLR</div><div class="brand-tag">SE-PA · 40.08°N 75.30°W</div></div></div>
+  <div class="brand" id="brand-home" title="Recenter · NWS Mount Holly (PHI)" style="cursor:pointer"><div class="brand-mark"></div><div><div class="brand-name">WEATHERXPLR</div><div class="brand-tag">PHI · Mount Holly</div></div></div>
   <div class="nav-tabs"><div class="nav-tab on" data-view="map">Map</div><div class="nav-tab" data-view="alerts">Alerts</div><div class="nav-tab" data-view="models">Models</div></div>
   <div class="top-mid"><div class="clock" id="clock">--:--:--</div><div class="chip live" id="chip-status">ONLINE</div><div class="chip" id="chip-alerts">ALERTS 0</div><div class="chip btn" id="chip-storm3d" title="Open Storm 3D"><i class="fa-solid fa-cube"></i> STORM 3D</div>
       <div class="chip btn" id="btn-audio"><i class="fa-solid fa-volume-xmark" id="audio-ico"></i> <span id="audio-lbl">TONES</span></div></div>
@@ -286,7 +287,8 @@
   <div class="stage-split">
     <div class="map-frame">
       <div class="model-bar">
-        <div class="model-chip on" data-layer="radar">Radar</div>
+        <div class="model-chip on" data-layer="global">Global</div>
+        <div class="model-chip" data-layer="radar">US NEXRAD</div>
         <div class="model-chip" data-layer="velocity">Velocity</div>
         <div class="model-chip" data-layer="satellite">Sat IR</div>
         <div class="model-chip" data-layer="qpe">QPE</div>
@@ -302,16 +304,16 @@
         <button type="button" class="map-btn" id="btn-home" title="Home"><i class="fa-solid fa-crosshairs"></i></button>
               </div>
       <div class="layer-pop" id="layer-pop">
-        <h4>NEXRAD / Imagery</h4>
-        <label class="ly-row"><input type="checkbox" id="ly-radar" checked> Reflectivity</label>
-        <label class="ly-row"><input type="checkbox" id="ly-velocity"> Base Velocity</label>
-        <label class="ly-row"><input type="checkbox" id="ly-sat"> GOES IR</label>
-        <label class="ly-row"><input type="checkbox" id="ly-qpe"> QPE 1h</label>
-        <h4>Sample</h4>
-        <div style="font-size:10px;color:var(--text-dim);padding:4px 6px;line-height:1.35">Click map to set Storm 3D sample point.</div>
+        <h4>Radar</h4>
+        <label class="ly-row"><input type="radio" name="rad" id="ly-global" value="global" checked> Global (RainViewer)</label>
+        <label class="ly-row"><input type="radio" name="rad" id="ly-nexrad" value="radar"> US NEXRAD</label>
+        <h4>Other</h4>
+        <label class="ly-row"><input type="checkbox" id="ly-velocity"> Base Velocity (US)</label>
+        <label class="ly-row"><input type="checkbox" id="ly-sat"> GOES IR (US)</label>
+        <label class="ly-row"><input type="checkbox" id="ly-qpe"> QPE 1h (US)</label>
+        <div style="font-size:10px;color:var(--text-dim);padding:4px 6px;line-height:1.35">Global = RainViewer worldwide composite. US NEXRAD = Iowa Mesonet high-detail CONUS.</div>
       </div>
-      </div>
-    <aside class="s3d-pane" id="s3d-pane">
+      <aside class="s3d-pane" id="s3d-pane">
       <div class="s3d-pane-hd">
         <h3>Storm 3D</h3>
         <div class="s3d-btns">
@@ -345,7 +347,7 @@
         <span class="blank"></span>
       </div>
       <div class="s3d-loc" id="s3d-loc">40.0759°N 75.2996°W · sample</div>
-      <div class="s3d-loc" style="color:var(--text-dim);font-size:8px;padding-top:0">Click map to sample · local max within ~7 mi of click</div>
+      <div class="s3d-loc" style="color:var(--text-dim);font-size:8px;padding-top:0">Click anywhere · 3D from model; ESTIMATED in US NEXRAD domain, MODEL elsewhere</div>
       <div class="s3d-pane-body">
         <div class="s3d-metrics" id="s3d-metrics">
           <div class="row"><span class="k">Mode</span><span class="v" id="s3d-mode">—</span></div>
@@ -424,6 +426,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261114f"></script>
+<script src="app.js?v=20261115c"></script>
 </body>
 </html>

@@ -1,4 +1,14 @@
 const LAT=40.0759,LON=-75.2996,CYCLE=120;
+// NWS Mount Holly (PHI) WFO
+const MOUNT_HOLLY={lat:39.9919,lon:-74.8083,label:"PHI Mount Holly"};
+/** Rough CONUS + nearshore NEXRAD mosaic coverage (Mesonet n0q) */
+function inNexradCoverage(lat, lon){
+  // Contiguous US + AK/HI not in national mosaic the same way — gate CONUS primarily
+  if(lat < 23.5 || lat > 50.5) return false;
+  if(lon < -126 || lon > -65) return false;
+  return true;
+}
+
 let sampleLat=40.0759,sampleLon=-75.2996,sampleMode=false,mapZoom=8;
 const PRESETS={
   sepa:{lat:40.0759,lon:-75.2996,label:"SE-PA"},
@@ -554,33 +564,119 @@ function setRadarFrame(idx){
   if(lab) lab.textContent = frame ? frame.replace("m","") + " ago" : "LIVE";
 }
 
+const RADAR_TILES = {
+  radar: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
+  velocity: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0v-900913/{z}/{x}/{y}.png",
+  satellite: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes-ir-4km-900913/{z}/{x}/{y}.png",
+  qpe: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/q2-n1p-900913/{z}/{x}/{y}.png",
+};
+
+/* ========== RainViewer global radar ========== */
+let rvHost = "https://tilecache.rainviewer.com";
+let rvFrames = []; // {time, path}
+let rvFrameIdx = 0;
+let rvLayer = null;
+let rvPlaying = false;
+let rvTimer = null;
+let activeRadarSource = "global"; // global | radar (nexrad)
+
+async function loadRainViewerFrames(){
+  try{
+    const j = await fetchT("https://api.rainviewer.com/public/weather-maps.json", {}, 12000).then(r=>r.json());
+    if(j.host) rvHost = j.host;
+    const past = (j.radar && j.radar.past) || [];
+    rvFrames = past.map(f => ({ time: f.time, path: f.path }));
+    if(!rvFrames.length) throw new Error("no RV frames");
+    rvFrameIdx = rvFrames.length - 1;
+    return true;
+  }catch(e){
+    console.warn("RainViewer", e);
+    rvFrames = [];
+    return false;
+  }
+}
+
+function rvTileUrl(frame){
+  // size 256, color 2 (Universal Blue / common), options 1_1 smooth+snow
+  // Free tier max zoom ~7 as of 2026
+  const path = frame.path;
+  return `${rvHost}${path}/256/{z}/{x}/{y}/2/1_1.png`;
+}
+
+function setRainViewerFrame(idx){
+  if(!rvFrames.length || !wxMap) return;
+  rvFrameIdx = Math.max(0, Math.min(rvFrames.length - 1, idx));
+  const frame = rvFrames[rvFrameIdx];
+  const url = rvTileUrl(frame);
+  const wasOn = rvLayer && wxMap.hasLayer(rvLayer);
+  if(rvLayer && wxMap.hasLayer(rvLayer)) wxMap.removeLayer(rvLayer);
+  rvLayer = L.tileLayer(url, {
+    opacity: 0.75,
+    maxZoom: 12,
+    maxNativeZoom: 7,
+    attribution: "RainViewer"
+  });
+  if(activeRadarSource === "global" || wasOn) rvLayer.addTo(wxMap);
+  wxLayers.global = rvLayer;
+  const lab = $("radar-age");
+  if(lab){
+    const ageMin = Math.max(0, Math.round((Date.now()/1000 - frame.time)/60));
+    lab.textContent = ageMin <= 1 ? "LIVE" : (ageMin + "m ago");
+  }
+}
+
+function showRadarSource(src){
+  activeRadarSource = src;
+  if(rvLayer && wxMap.hasLayer(rvLayer)) wxMap.removeLayer(rvLayer);
+  if(wxLayers.radar && wxMap.hasLayer(wxLayers.radar)) wxMap.removeLayer(wxLayers.radar);
+  if(src === "global"){
+    if(rvFrames.length) setRainViewerFrame(rvFrames.length - 1);
+    else loadRainViewerFrames().then(ok => { if(ok) setRainViewerFrame(rvFrames.length-1); });
+  } else if(src === "radar"){
+    if(wxLayers.radar) wxLayers.radar.addTo(wxMap);
+  }
+  document.querySelectorAll(".model-chip[data-layer=global],.model-chip[data-layer=radar]").forEach(c=>{
+    c.classList.toggle("on", c.dataset.layer === (src === "radar" ? "radar" : "global"));
+  });
+}
+
 function playRadar(on){
+  // unified play: prefers active source
   radarPlaying = !!on;
+  rvPlaying = !!on;
   const btn = $("btn-radar-play");
   if(btn){
     btn.classList.toggle("on", radarPlaying);
     btn.innerHTML = radarPlaying ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
   }
   if(radarTimer){ clearInterval(radarTimer); radarTimer = null; }
+  if(rvTimer){ clearInterval(rvTimer); rvTimer = null; }
   if(!radarPlaying) return;
-  radarTimer = setInterval(()=>{
-    let n = radarFrameIdx + 1;
-    if(n >= RADAR_FRAMES.length) n = 0;
-    setRadarFrame(n);
-  }, 700);
+  if(activeRadarSource === "global"){
+    rvTimer = setInterval(()=>{
+      let n = rvFrameIdx + 1;
+      if(n >= rvFrames.length) n = 0;
+      setRainViewerFrame(n);
+    }, 700);
+  } else {
+    radarTimer = setInterval(()=>{
+      let n = radarFrameIdx + 1;
+      if(n >= RADAR_FRAMES.length) n = 0;
+      setRadarFrame(n);
+    }, 700);
+  }
 }
 
 function refreshRadarTiles(){
-  // Force NEXRAD live tiles to re-fetch (~2 min)
-  const bust = Date.now();
-  const liveUrl = radarUrl("radar", "") + (radarUrl("radar","").includes("?") ? "&" : "") ;
-  // Rebuild live radar layer with cache-buster via Leaflet tile url rebuild
-  if(!wxMap || !wxLayers.radar) return;
-  if(radarPlaying){
-    // keep loop running; next cycle will use fresher tiles after we update base
-    // Update the empty-frame (live) URL template by recreating layer when at live index later
+  if(activeRadarSource === "global"){
+    loadRainViewerFrames().then(ok=>{
+      if(ok && !radarPlaying) setRainViewerFrame(rvFrames.length-1);
+    });
     return;
   }
+  const bust = Date.now();
+  if(!wxMap || !wxLayers.radar) return;
+  if(radarPlaying) return;
   const wasOn = wxMap.hasLayer(wxLayers.radar);
   if(wasOn) wxMap.removeLayer(wxLayers.radar);
   wxLayers.radar = L.tileLayer(
@@ -592,22 +688,6 @@ function refreshRadarTiles(){
   const lab=$("radar-age"); if(lab) lab.textContent="LIVE";
 }
 
-function initRadarAnimControls(){
-  $("btn-radar-play")?.addEventListener("click", ()=> playRadar(!radarPlaying));
-  $("btn-radar-live")?.addEventListener("click", ()=>{
-    playRadar(false);
-    setRadarFrame(RADAR_FRAMES.length - 1);
-  });
-  // 2-minute radar refresh
-  setInterval(refreshRadarTiles, 120000);
-}
-
-const RADAR_TILES = {
-  radar: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
-  velocity: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0v-900913/{z}/{x}/{y}.png",
-  satellite: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes-ir-4km-900913/{z}/{x}/{y}.png",
-  qpe: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/q2-n1p-900913/{z}/{x}/{y}.png",
-};
 let wxMap = null;
 let wxLayers = {};
 let sampleMarker = null;
@@ -638,7 +718,11 @@ function initWxMap(){
   wxLayers.velocity = L.tileLayer(RADAR_TILES.velocity, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10 });
   wxLayers.satellite = L.tileLayer(RADAR_TILES.satellite, { opacity: 0.5, maxZoom: 12, maxNativeZoom: 10 });
   wxLayers.qpe = L.tileLayer(RADAR_TILES.qpe, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10 });
-  wxLayers.radar.addTo(wxMap);
+  // default: Global RainViewer; NEXRAD available as alternate
+  loadRainViewerFrames().then(ok=>{
+    if(ok){ activeRadarSource="global"; setRainViewerFrame(rvFrames.length-1); }
+    else { activeRadarSource="radar"; wxLayers.radar.addTo(wxMap); }
+  });
   L.control.zoom({ position: "bottomleft" }).addTo(wxMap);
 
   sampleMarker = L.circleMarker([sampleLat, sampleLon], {
@@ -654,9 +738,17 @@ function initWxMap(){
   document.querySelectorAll(".model-chip[data-layer]").forEach(chip => {
     chip.addEventListener("click", () => {
       const key = chip.dataset.layer;
-      document.querySelectorAll(".model-chip[data-layer]").forEach(c => c.classList.remove("on"));
+      if(key==="global" || key==="radar"){
+        document.querySelectorAll(".model-chip[data-layer=global],.model-chip[data-layer=radar]").forEach(c=>c.classList.remove("on"));
+        chip.classList.add("on");
+        showRadarSource(key==="radar"?"radar":"global");
+        return;
+      }
+      document.querySelectorAll(".model-chip[data-layer]").forEach(c=>{
+        if(c.dataset.layer!=="global" && c.dataset.layer!=="radar") c.classList.remove("on");
+      });
       chip.classList.add("on");
-      ["radar","velocity","satellite","qpe"].forEach(k => {
+      ["velocity","satellite","qpe"].forEach(k=>{
         if(wxLayers[k] && wxMap.hasLayer(wxLayers[k])) wxMap.removeLayer(wxLayers[k]);
       });
       if(wxLayers[key]) wxLayers[key].addTo(wxMap);
@@ -679,7 +771,7 @@ function initWxMap(){
     $("btn-layers")?.classList.toggle("on");
   });
   $("btn-home")?.addEventListener("click", () => {
-    setSample(PRESETS.sepa.lat, PRESETS.sepa.lon, "sepa");
+    goMountHolly();
   });
 
   setTimeout(() => wxMap.invalidateSize(true), 250);
@@ -693,6 +785,18 @@ function setLayer(layer){
   if(sampleMarker) sampleMarker.setLatLng([sampleLat, sampleLon]);
 }
 
+function initRadarAnimControls(){
+  setInterval(refreshRadarTiles, 120000);
+  $("btn-radar-play")?.addEventListener("click", ()=> playRadar(!radarPlaying));
+  $("btn-radar-live")?.addEventListener("click", ()=>{
+    playRadar(false);
+    if(activeRadarSource==="global"){
+      loadRainViewerFrames().then(ok=>{ if(ok) setRainViewerFrame(rvFrames.length-1); });
+    } else {
+      setRadarFrame(RADAR_FRAMES.length - 1);
+    }
+  });
+}
 function initRadar(){
   initWxMap();
   initRadarAnimControls();
@@ -794,7 +898,8 @@ async function fetchStorm3D(){
 }
 
 async function buildStormClient(lat, lon){
-  // Sample click point + 4 neighbors (~0.08° ≈ 5–7 mi) so thin model grids don't miss cells under radar
+  const nexrad = inNexradCoverage(lat, lon);
+  // Sample click point + 4 neighbors (~0.08° ≈ 5–7 mi)
   const offs = [[0,0],[0.08,0],[-0.08,0],[0,0.08],[0,-0.08]];
   let best = {cape:0, precip:0, code:0, gust:0, lat, lon};
   try{
@@ -881,17 +986,25 @@ async function buildStormClient(lat, lon){
   }
 
   const radiusMi = 7;
+  let mode = "clear";
+  if(intensity!=="none"){
+    mode = nexrad ? "estimated" : "model";
+  }
+  const disc = nexrad
+    ? `US NEXRAD domain. Local max ~${radiusMi} mi (Open-Meteo + NWS). Not Level-II volume. Map can show Global (RainViewer) or US NEXRAD.`
+    : `Outside CONUS NEXRAD. 3D from Open-Meteo (~${radiusMi} mi). Map Global layer uses RainViewer worldwide composite where radars exist.`;
   return{
     ok:true,
-    mode:intensity==="none"?"clear":"estimated",
-    disclaimer:`Local max within ~${radiusMi} mi of click (5 Open-Meteo points + NWS at click). Not Level-II measured volume — radar mosaic may still show echoes the model underplays.`,
+    mode,
+    disclaimer:disc,
     location:{lat,lon},
     radiusMi,
+    nexradCoverage:nexrad,
     time:new Date().toISOString(),
     timeLocal:new Date().toLocaleString("en-US",{timeZone:"America/New_York"}),
     metrics:{echoTopFt:Math.round(echoTop),maxDbz:Math.round(maxDbz*10)/10,maxDbzHeightFt:Math.round(maxDbzHt),coreTopFt:Math.round(coreTop),intensity,cape:Math.round(cape),precipIn:Math.round(precip*100)/100,weatherCode:code,gustMph:Math.round(gust)},
     alerts:severe,
-    source:{meteo:"Open-Meteo",alerts:"api.weather.gov",path:"client",sample:`local-max-${radiusMi}mi`}
+    source:{meteo:"Open-Meteo",alerts:"api.weather.gov",path:"client",sample:`local-max-${radiusMi}mi`,nexrad}
   };
 }
 
@@ -1203,7 +1316,10 @@ function updateStormMetricsUI(data){
   const m=(data&&data.metrics)||{};
   const mode=(data&&data.mode)||"—";
   const set=(id,v)=>{const e=$(id); if(e) e.textContent=v};
-  set("s3d-mode", String(mode).toUpperCase());
+  set("s3d-mode", mode==="model"?"MODEL":mode==="no-coverage"?"NO NEXRAD":String(mode).toUpperCase());
+  if(mode==="model"){
+    /* keep weather chips from metrics */
+  }
   set("s3d-echo", m.echoTopFt ? m.echoTopFt.toLocaleString()+" ft" : "—");
   set("s3d-dbz", m.maxDbz!=null ? m.maxDbz+" dBZ" : "—");
   set("s3d-core", m.coreTopFt ? m.coreTopFt.toLocaleString()+" ft" : "—");
@@ -1262,7 +1378,13 @@ async function refreshStorm3DPane(){
 window.refreshStorm3D=refreshStorm3DPane;
 
 // Click-to-sample: approximate lat/lon from pixel over Windy iframe (Web Mercator)
+function goMountHolly(){
+  setSample(MOUNT_HOLLY.lat, MOUNT_HOLLY.lon, "sepa");
+  if(wxMap) wxMap.setView([MOUNT_HOLLY.lat, MOUNT_HOLLY.lon], 8, {animate:true});
+}
 function initStorm3DControls(){
+  $("brand-home")?.addEventListener("click", goMountHolly);
+
   document.querySelectorAll("#s3d-presets button").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const key=btn.dataset.preset;
