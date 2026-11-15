@@ -500,25 +500,121 @@ window.openKPHL=function(){const p=kphlObs||{};const tF=p.temperature&&p.tempera
   <button class="btn" style="width:100%" onclick="openAFD()">PHI Area Forecast Discussion</button>`)};
 window.openAFD=function(){if(!afdFull){openModal("PHI AFD",`<span class="err">Not loaded yet</span>`);return}openModal("PHI AFD",`<pre style="white-space:pre-wrap;font-size:12px;font-family:var(--font-mono)">${esc(afdFull)}</pre>`)};
 
-window.openModels=function(){
-  openModal("Model Guidance · SE-PA",`
+window.openModels=async function(){
+  const lat=sampleLat, lon=sampleLon;
+  const cur=omData&&omData.current?omData.current:{};
+  let body = `<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Point ${lat.toFixed(3)}°, ${lon.toFixed(3)}° · Open-Meteo blend at sample</div>
   <div class="model-grid" style="margin-bottom:12px">
-    <div class="model-cell"><div class="m-name">BLEND / OM</div><div class="m-val">${$("mg-blend").textContent}</div></div>
-    <div class="model-cell"><div class="m-name">HRRR</div><div class="m-val">${$("mg-hrrr").textContent}</div></div>
-    <div class="model-cell"><div class="m-name">GFS</div><div class="m-val">${$("mg-gfs").textContent}</div></div>
-    <div class="model-cell"><div class="m-name">REFS</div><div class="m-val">NOMADS</div></div>
+    <div class="model-cell"><div class="m-name">TEMP</div><div class="m-val">${cur.temperature_2m!=null?Math.round(cur.temperature_2m)+"°":"—"}</div></div>
+    <div class="model-cell"><div class="m-name">WIND</div><div class="m-val">${cur.wind_speed_10m!=null?Math.round(cur.wind_speed_10m):"—"}</div></div>
+    <div class="model-cell"><div class="m-name">GUST</div><div class="m-val">${cur.wind_gusts_10m!=null?Math.round(cur.wind_gusts_10m):"—"}</div></div>
+    <div class="model-cell"><div class="m-name">PRECIP</div><div class="m-val">${cur.precipitation!=null?cur.precipitation:"—"}</div></div>
   </div>
-  <p style="font-size:12px;color:var(--text-mid);line-height:1.5;margin-bottom:10px">
-    <b>HRRR</b> remains operational (3 km, hourly, radar-aware). Point values shown when Open-Meteo exposes a regional HRRR series for this location.
-  </p>
-  <p style="font-size:12px;color:var(--text-mid);line-height:1.5;margin-bottom:10px">
-    <b>RRFS / REFS</b> are NOAA’s new operational short-range deterministic and ensemble systems (live since Nov 2026). Full fields are GRIB2 on NOMADS and AWS <code>s3://noaa-rrfs-ops-pds</code>. Browser apps use point APIs or a thin worker for subsets.
-  </p>
-  <button class="btn" style="width:100%;margin-bottom:6px" onclick="window.open('https://nomads.ncep.noaa.gov/','_blank')">NOMADS model inventory ↗</button>
-  <button class="btn" style="width:100%;margin-bottom:6px" onclick="window.open('https://registry.opendata.aws/noaa-rrfs-ops/','_blank')">AWS RRFS / REFS open data ↗</button>
-  <button class="btn" style="width:100%" onclick="window.open('https://registry.opendata.aws/noaa-hrrr-pds/','_blank')">AWS HRRR archive ↗</button>
-  `);
+  <div id="model-fc-box" style="margin-bottom:12px"><span class="err" style="color:var(--text-dim)">Loading 7-day model strip…</span></div>
+  <p style="font-size:12px;color:var(--text-mid);line-height:1.5;margin-bottom:8px"><b>HRRR</b> — 3 km radar-aware short range. <b>GFS</b> — global medium range. <b>RRFS/REFS</b> — NOAA short-range ensemble (GRIB on NOMADS/AWS).</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+    <button class="btn" onclick="window.open('https://nomads.ncep.noaa.gov/','_blank')">NOMADS ↗</button>
+    <button class="btn" onclick="window.open('https://www.spc.noaa.gov/products/outlook/','_blank')">SPC Outlooks ↗</button>
+    <button class="btn" onclick="window.open('https://registry.opendata.aws/noaa-hrrr-pds/','_blank')">AWS HRRR ↗</button>
+    <button class="btn" onclick="window.open('https://registry.opendata.aws/noaa-rrfs-ops/','_blank')">AWS RRFS/REFS ↗</button>
+    <button class="btn" onclick="window.open('https://mag.ncep.noaa.gov/','_blank')">NCEP MAG ↗</button>
+    <button class="btn" onclick="window.open('https://www.tropicaltidbits.com/analysis/models/','_blank')">Tropical Tidbits ↗</button>
+  </div>
+  <button class="btn" style="width:100%" onclick="openDayDetail(0)">Open hourly charts (sample region)</button>`;
+  openModal("Models · Guidance", body);
+  try{
+    const days=(omData&&omData.daily)||{};
+    const t=days.time||[];
+    if(t.length){
+      const rows=t.slice(0,7).map((d,i)=>{
+        const hi=days.temperature_2m_max&&days.temperature_2m_max[i];
+        const lo=days.temperature_2m_min&&days.temperature_2m_min[i];
+        const pop=days.precipitation_probability_max&&days.precipitation_probability_max[i];
+        const day=new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+        return `<tr><td>${day}</td><td>${hi!=null?Math.round(hi)+"°":"—"}</td><td>${lo!=null?Math.round(lo)+"°":"—"}</td><td>${pop!=null?pop+"%":"—"}</td></tr>`;
+      }).join("");
+      const box=$("model-fc-box");
+      if(box) box.innerHTML=`<table class="fc-table"><thead><tr><th>Day</th><th>Hi</th><th>Lo</th><th>PoP</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+  }catch(e){}
 };
+
+window.openAlertsConsole=async function(){
+  openModal("Alerts · Console", `<div id="alerts-console"><span class="err" style="color:var(--text-dim)">Loading regional + point alerts…</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px">
+      <button class="btn" onclick="window.open('https://www.spc.noaa.gov/products/outlook/','_blank')">SPC Day 1–3 ↗</button>
+      <button class="btn" onclick="window.open('https://www.weather.gov/phi/','_blank')">NWS PHI ↗</button>
+      <button class="btn" onclick="window.open('https://alerts.weather.gov/','_blank')">NWS CAP feed ↗</button>
+      <button class="btn" onclick="fetchAlerts().then(()=>openAlertsConsole())">Refresh list</button>
+    </div>`);
+  try{
+    const headers={Accept:"application/geo+json","User-Agent":"WeatherXplr/2.0"};
+    const [pt, pa, nj, de] = await Promise.all([
+      fetchT(`https://api.weather.gov/alerts/active?point=${sampleLat},${sampleLon}`,{headers},12000).then(r=>r.json()).catch(()=>({features:[]})),
+      fetchT("https://api.weather.gov/alerts/active?area=PA",{headers},12000).then(r=>r.json()).catch(()=>({features:[]})),
+      fetchT("https://api.weather.gov/alerts/active?area=NJ",{headers},12000).then(r=>r.json()).catch(()=>({features:[]})),
+      fetchT("https://api.weather.gov/alerts/active?area=DE",{headers},12000).then(r=>r.json()).catch(()=>({features:[]})),
+    ]);
+    const seen=new Set();
+    const merge=[];
+    for(const bag of [pt,pa,nj,de]){
+      for(const f of (bag.features||[])){
+        if(!f.id||seen.has(f.id)) continue;
+        seen.add(f.id);
+        merge.push(f);
+        if(f.id) alertCache[f.id]=f.properties||{};
+      }
+    }
+    alertCache.features=merge;
+    const sevOrder={Extreme:0,Severe:1,Moderate:2,Minor:3,Unknown:4};
+    merge.sort((a,b)=>{
+      const sa=sevOrder[(a.properties||{}).severity]??5;
+      const sb=sevOrder[(b.properties||{}).severity]??5;
+      return sa-sb;
+    });
+    const box=$("alerts-console");
+    if(!box) return;
+    if(!merge.length){
+      box.innerHTML=`<div style="color:var(--text-dim)">No active alerts for sample point or PA / NJ / DE.</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:6px">Sample ${sampleLat.toFixed(3)}°, ${sampleLon.toFixed(3)}°</div>`;
+      return;
+    }
+    box.innerHTML=`<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">${merge.length} active · point + PA/NJ/DE · sorted by severity</div>`+
+      merge.slice(0,60).map(f=>{
+        const p=f.properties||{};
+        const id=esc(f.id||"");
+        return `<div class="alert-item ${sevClass(p.severity)}" data-id="${id}" style="margin-bottom:6px;cursor:pointer">
+          <div class="ev">${esc(p.event||"Alert")} · ${esc(p.severity||"")}</div>
+          <div class="hd">${esc(p.headline||p.areaDesc||"")}</div>
+        </div>`;
+      }).join("");
+    box.querySelectorAll(".alert-item").forEach(el=>{
+      el.addEventListener("click",()=>openAlert(el.getAttribute("data-id")));
+    });
+  }catch(e){
+    const box=$("alerts-console");
+    if(box) box.innerHTML=`<span class="err">${esc(String(e.message||e))}</span>`;
+  }
+};
+
+window.focusMapView=function(){
+  closeModal();
+  document.querySelectorAll(".nav-tab").forEach(x=>x.classList.remove("on"));
+  document.querySelector('.nav-tab[data-view="map"]')?.classList.add("on");
+  document.querySelector('.seg button[data-pane="cond"]')?.click();
+  try{
+    if(wxMap){
+      wxMap.invalidateSize(true);
+      wxMap.setView([sampleLat, sampleLon], mapZoom||wxMap.getZoom()||8, {animate:true});
+    }
+  }catch(e){}
+  const frame=$("wx-map");
+  if(frame){
+    frame.style.outline="2px solid var(--cyan)";
+    setTimeout(()=>{ frame.style.outline=""; }, 900);
+  }
+};
+
 
 
 
@@ -945,8 +1041,18 @@ function initRadar(){
   document.querySelectorAll(".nav-tab").forEach(t => t.onclick = () => {
     document.querySelectorAll(".nav-tab").forEach(x => x.classList.remove("on"));
     t.classList.add("on");
-    if(t.dataset.view === "alerts") document.querySelector('.seg button[data-pane="alerts"]')?.click();
-    if(t.dataset.view === "models" && typeof openModels === "function") openModels();
+    const v = t.dataset.view;
+    if(v === "map") focusMapView();
+    else if(v === "alerts"){
+      document.querySelector('.seg button[data-pane="alerts"]')?.click();
+      openAlertsConsole();
+    }
+    else if(v === "models") openModels();
+  });
+  $("chip-alerts")?.addEventListener("click", ()=>{
+    document.querySelectorAll(".nav-tab").forEach(x=>x.classList.remove("on"));
+    document.querySelector('.nav-tab[data-view="alerts"]')?.classList.add("on");
+    openAlertsConsole();
   });
 }
 
