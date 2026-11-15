@@ -27,12 +27,16 @@ jobs:
       - name: Install Wrangler
         run: npm install -g wrangler
 
+      # Note: cannot use `if: secrets.X` in GitHub Actions — check inside the shell instead
       - name: Sync Visual Crossing API key to Cloudflare
-        if: ${{ secrets.VC_API_KEY != '' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           VC_API_KEY: ${{ secrets.VC_API_KEY }}
         run: |
+          if [ -z "$VC_API_KEY" ]; then
+            echo "VC_API_KEY secret not set — skipping wrangler secret put"
+            exit 0
+          fi
           echo "$VC_API_KEY" | npx wrangler secret put VC_API_KEY
 
       - name: Deploy Worker
