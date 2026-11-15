@@ -221,6 +221,17 @@
 .hydro-compact .obs-row .tv{font-size:8px}
 .rail.right .rail-body{display:flex;flex-direction:column;min-height:0;overflow:hidden}
 #brand-home:hover{opacity:.85}.brand-mark{box-shadow:0 0 10px rgba(59,158,255,.45)}
+.vc-form{display:flex;flex-direction:column;gap:6px}
+.vc-form label{font-size:8px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em}
+.vc-form input,.vc-form select{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:5px 6px;font-family:var(--font-mono);font-size:11px}
+.vc-form .row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.vc-form .btn-go{background:var(--cyan);color:#0a0c10;border:none;border-radius:4px;padding:6px;font-weight:700;font-size:11px;cursor:pointer;letter-spacing:.04em}
+.vc-day{border-left:3px solid var(--cyan);background:var(--raise);padding:6px 8px;margin-bottom:5px;border-radius:0 4px 4px 0;cursor:pointer}
+.vc-day:hover{filter:brightness(1.08)}
+.vc-day .d{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--text)}
+.vc-day .meta{font-size:10px;color:var(--text-mid);margin-top:2px}
+.vc-day .temps{font-family:var(--font-mono);font-size:12px;color:var(--cyan);margin-top:2px}
+.vc-curr .card-val{font-size:22px}
 </style>
 </head>
 <body>
@@ -235,7 +246,7 @@
 </header>
 <div class="main">
 <aside class="rail">
-  <div class="seg"><button type="button" class="on" data-pane="cond">Point</button><button type="button" data-pane="alerts">Alerts</button><button type="button" data-pane="kphl">KPHL</button><button type="button" data-pane="phi">PHI</button></div>
+  <div class="seg"><button type="button" class="on" data-pane="cond">Point</button><button type="button" data-pane="alerts">Alerts</button><button type="button" data-pane="kphl">KPHL</button><button type="button" data-pane="phi">PHI</button><button type="button" data-pane="vc">VC</button></div>
   <div class="rail-body">
     <div class="pane on" id="pane-cond">
       <div class="card" style="cursor:default"><div class="card-hd"><span class="card-title">Sample point</span><span class="card-sub" id="pt-coords">—</span></div>
@@ -281,15 +292,48 @@
       <button class="btn" style="width:100%;margin-top:6px" onclick="openAFD()">Full AFD modal</button>
       <button class="btn" style="width:100%;margin-top:4px" onclick="window.open('https://www.weather.gov/phi/','_blank')">weather.gov/phi ↗</button>
     </div>
+    
+    <div class="pane" id="pane-vc">
+      <div class="card vc-curr" style="cursor:default">
+        <div class="card-hd"><span class="card-title">Visual Crossing</span><span class="card-sub">Current</span></div>
+        <div class="card-val" id="vc-temp">—<span class="card-unit">°F</span></div>
+        <div class="card-sub" id="vc-cond">—</div>
+        <div class="metric-row"><span class="k">Feels</span><span class="v" id="vc-feels">—</span></div>
+        <div class="metric-row"><span class="k">Humidity</span><span class="v" id="vc-rh">—</span></div>
+        <div class="metric-row"><span class="k">Wind</span><span class="v" id="vc-wind">—</span></div>
+        <div class="metric-row"><span class="k">Precip</span><span class="v" id="vc-precip">—</span></div>
+        <div class="metric-row"><span class="k">Pressure</span><span class="v" id="vc-pres">—</span></div>
+        <div class="metric-row"><span class="k">Clouds</span><span class="v" id="vc-cloud">—</span></div>
+        <div class="card-sub" id="vc-addr" style="margin-top:6px">Sample point</div>
+      </div>
+      <div class="card" style="cursor:default">
+        <div class="card-title" style="margin-bottom:8px">Historical search</div>
+        <div class="vc-form">
+          <div class="row2">
+            <div><label>Start</label><input type="date" id="vc-start"/></div>
+            <div><label>End</label><input type="date" id="vc-end"/></div>
+          </div>
+          <label>Location (optional — blank = map sample)</label>
+          <input type="text" id="vc-loc" placeholder="e.g. Philadelphia, PA or lat,lon"/>
+          <button type="button" class="btn-go" id="vc-go">LOAD HISTORY</button>
+        </div>
+      </div>
+      <div class="card" style="cursor:default">
+        <div class="card-hd"><span class="card-title">Daily history</span><span class="card-sub" id="vc-hist-meta">—</span></div>
+        <div id="vc-hist-list"><span class="err" style="color:var(--text-dim)">Pick a date range and load</span></div>
+      </div>
     </div>
+</div>
 </aside>
 <section class="stage">
   <div class="stage-split">
     <div class="map-frame">
 
       <div class="model-bar">
-        <div class="model-chip on" data-layer="global">Global</div>
-        <div class="model-chip" data-layer="radar">US NEXRAD</div>
+        <div class="model-chip on" data-layer="radar">US NEXRAD</div>
+        <div class="model-chip" data-layer="global">Global</div>
+        <div class="model-chip" data-layer="eet">Echo Tops</div>
+        <div class="model-chip" data-layer="mrms">MRMS HSR</div>
         <div class="model-chip" data-layer="velocity">Velocity</div>
         <div class="model-chip" data-layer="satellite">Sat IR</div>
         <div class="model-chip" data-layer="qpe">QPE</div>
@@ -305,16 +349,18 @@
         <button type="button" class="map-btn" id="btn-home" title="Home"><i class="fa-solid fa-crosshairs"></i></button>
               </div>
       <div class="layer-pop" id="layer-pop">
-        <h4>Radar</h4>
-        <label class="ly-row"><input type="radio" name="rad" id="ly-global" value="global" checked> Global (RainViewer)</label>
-        <label class="ly-row"><input type="radio" name="rad" id="ly-nexrad" value="radar"> US NEXRAD</label>
-        <h4>Other</h4>
-        <label class="ly-row"><input type="checkbox" id="ly-velocity"> Base Velocity (US)</label>
-        <label class="ly-row"><input type="checkbox" id="ly-sat"> GOES IR (US)</label>
-        <label class="ly-row"><input type="checkbox" id="ly-qpe"> QPE 1h (US)</label>
-        <div style="font-size:10px;color:var(--text-dim);padding:4px 6px;line-height:1.35">Global = RainViewer worldwide composite. US NEXRAD = Iowa Mesonet high-detail CONUS.</div>
+        <h4>IEM OGC / TMS</h4>
+        <label class="ly-row"><input type="radio" name="rad" id="ly-nexrad" value="radar" checked> US NEXRAD n0q</label>
+        <label class="ly-row"><input type="radio" name="rad" id="ly-global" value="global"> Global RainViewer</label>
+        <label class="ly-row"><input type="radio" name="rad" id="ly-eet" value="eet"> Echo Tops (EET)</label>
+        <label class="ly-row"><input type="radio" name="rad" id="ly-mrms" value="mrms"> MRMS Hybrid Scan</label>
+        <h4>Other US</h4>
+        <label class="ly-row"><input type="checkbox" id="ly-velocity"> Base Velocity</label>
+        <label class="ly-row"><input type="checkbox" id="ly-sat"> GOES IR</label>
+        <label class="ly-row"><input type="checkbox" id="ly-qpe"> QPE 1h</label>
+        <div style="font-size:10px;color:var(--text-dim);padding:4px 6px;line-height:1.35">Iowa State Mesonet OGC/TMS · mesonet.agron.iastate.edu/ogc</div>
       </div>
-    </div>
+      </div>
     <aside class="s3d-pane" id="s3d-pane">
       <div class="s3d-pane-hd">
         <h3>Storm 3D</h3>
@@ -428,6 +474,6 @@
   // Leave "" until the Action has deployed; board still works client-side.
   window.STORM3D_WORKER_URL = "https://weatherxplr-storm3d.jasonsaro.workers.dev";
 </script>
-<script src="app.js?v=20261115d"></script>
+<script src="app.js?v=20261115g"></script>
 </body>
 </html>

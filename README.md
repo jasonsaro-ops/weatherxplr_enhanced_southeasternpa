@@ -54,3 +54,29 @@ Storm 3D still runs in the browser (same heuristics). Worker only adds edge fetc
 
 ## Board
 GitHub Pages is fine for the UI. Worker is separate on `*.workers.dev`.
+
+
+## Visual Crossing API key (GitHub secret)
+
+The browser never sees the Visual Crossing key. It is stored as a **Cloudflare Worker secret** and synced from GitHub.
+
+### One-time setup
+
+1. GitHub repo → **Settings → Secrets and variables → Actions**
+2. Add secret **`VC_API_KEY`** = your Visual Crossing key  
+3. Ensure **`CLOUDFLARE_API_TOKEN`** is already set (Worker deploy)
+4. Push `worker/` or run workflow **Deploy Storm 3D Worker** manually
+
+The Action runs:
+
+```bash
+echo "$VC_API_KEY" | npx wrangler secret put VC_API_KEY
+npx wrangler deploy
+```
+
+Client calls:
+
+- `{WORKER}/vc/current?lat=&lon=`
+- `{WORKER}/vc/history?lat=&lon=&start=&end=`
+
+(`window.STORM3D_WORKER_URL` in `index.html` must point at the worker.)

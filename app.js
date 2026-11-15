@@ -520,6 +520,131 @@ window.openModels=function(){
   `);
 };
 
+
+
+/* ========== Visual Crossing via Cloudflare Worker (API key is a CF secret) ========== */
+let vcCurrent = null;
+let vcHistory = null;
+
+function vcWorkerBase(){
+  const w = (typeof STORM3D_WORKER !== "undefined" && STORM3D_WORKER) ||
+    (typeof window !== "undefined" && window.STORM3D_WORKER_URL) || "";
+  return (w || "").replace(/\/$/, "");
+}
+
+function vcLocParam(){
+  return `${sampleLat.toFixed(4)},${sampleLon.toFixed(4)}`;
+}
+
+async function fetchVCCurrent(){
+  const base = vcWorkerBase();
+  if(!base){ console.warn("VC: set STORM3D_WORKER_URL for proxied Visual Crossing"); return; }
+  try{
+    const u = `${base}/vc/current?lat=${sampleLat}&lon=${sampleLon}`;
+    const j = await fetchT(u, {}, 15000).then(r=>{
+      if(!r.ok) throw new Error("VC "+r.status);
+      return r.json();
+    });
+    if(j.error) throw new Error(j.error);
+    vcCurrent = j;
+    const c = j.currentConditions || {};
+    const set = (id,v)=>{ const e=$(id); if(e) e.textContent = v; };
+    const setH = (id,h)=>{ const e=$(id); if(e) e.innerHTML = h; };
+    setH("vc-temp", (c.temp!=null?Math.round(c.temp):"—")+`<span class="card-unit">°F</span>`);
+    set("vc-cond", c.conditions || "—");
+    set("vc-feels", c.feelslike!=null?Math.round(c.feelslike)+"°F":"—");
+    set("vc-rh", c.humidity!=null?Math.round(c.humidity)+"%":"—");
+    set("vc-wind", c.windspeed!=null?`${Math.round(c.windspeed)} mph · ${c.winddir!=null?Math.round(c.winddir)+"°":""}`:"—");
+    set("vc-precip", c.precip!=null?c.precip+" in":"—");
+    set("vc-pres", c.pressure!=null?Math.round(c.pressure)+" mb":"—");
+    set("vc-cloud", c.cloudcover!=null?Math.round(c.cloudcover)+"%":"—");
+    set("vc-addr", j.resolvedAddress || vcLocParam());
+  }catch(e){
+    console.warn("VC current", e);
+    const el=$("vc-cond"); if(el) el.textContent = "VC feed error";
+  }
+}
+
+async function fetchVCHistory(start, end, locOverride){
+  const base = vcWorkerBase();
+  const list = $("vc-hist-list");
+  const meta = $("vc-hist-meta");
+  if(list) list.innerHTML = '<span class="err" style="color:var(--text-dim)">Loading…</span>';
+  if(!base){
+    if(list) list.innerHTML = '<span class="err">Worker URL not set</span>';
+    return;
+  }
+  try{
+    const params = new URLSearchParams({ start, end });
+    if(locOverride && locOverride.trim()) params.set("location", locOverride.trim());
+    else { params.set("lat", String(sampleLat)); params.set("lon", String(sampleLon)); }
+    const u = `${base}/vc/history?${params}`;
+    const j = await fetchT(u, {}, 20000).then(r=>{
+      if(!r.ok) throw new Error("VC hist "+r.status);
+      return r.json();
+    });
+    if(j.error) throw new Error(j.error);
+    vcHistory = j;
+    const days = j.days || [];
+    if(meta) meta.textContent = `${days.length} day(s)`;
+    if(!list) return;
+    if(!days.length){
+      list.innerHTML = '<span class="err">No daily rows</span>';
+      return;
+    }
+    list.innerHTML = days.map((d,i)=>{
+      const hi = d.tempmax!=null?Math.round(d.tempmax):"—";
+      const lo = d.tempmin!=null?Math.round(d.tempmin):"—";
+      const pcp = d.precip!=null?d.precip:"—";
+      const cond = d.conditions || "";
+      return `<div class="vc-day" data-i="${i}">
+        <div class="d">${esc(d.datetime||"")}</div>
+        <div class="temps">${hi}° / ${lo}°F · ${pcp} in</div>
+        <div class="meta">${esc(cond)}</div>
+      </div>`;
+    }).join("");
+    list.querySelectorAll(".vc-day").forEach(el=>{
+      el.addEventListener("click", ()=>{
+        const d = days[+el.dataset.i];
+        if(!d) return;
+        openModal(`VC · ${d.datetime}`, `
+          <div class="metric-row"><span class="k">High / Low</span><span class="v">${d.tempmax??"—"}° / ${d.tempmin??"—"}°F</span></div>
+          <div class="metric-row"><span class="k">Avg</span><span class="v">${d.temp??"—"}°F</span></div>
+          <div class="metric-row"><span class="k">Precip</span><span class="v">${d.precip??"—"} in</span></div>
+          <div class="metric-row"><span class="k">Humidity</span><span class="v">${d.humidity??"—"}%</span></div>
+          <div class="metric-row"><span class="k">Wind</span><span class="v">${d.windspeed??"—"} mph gust ${d.windgust??"—"}</span></div>
+          <div class="metric-row"><span class="k">Pressure</span><span class="v">${d.pressure??"—"} mb</span></div>
+          <div class="metric-row"><span class="k">Cloud cover</span><span class="v">${d.cloudcover??"—"}%</span></div>
+          <div class="metric-row"><span class="k">UV index</span><span class="v">${d.uvindex??"—"}</span></div>
+          <div class="metric-row"><span class="k">Sunrise / Sunset</span><span class="v">${d.sunrise||"—"} / ${d.sunset||"—"}</span></div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-mid)">${esc(d.description||d.conditions||"")}</div>
+          <div style="margin-top:8px;font-size:10px;color:var(--text-dim)">${esc(j.resolvedAddress||"")}</div>
+        `);
+      });
+    });
+  }catch(e){
+    console.warn("VC history", e);
+    if(list) list.innerHTML = `<span class="err">${esc(String(e.message||e))}</span>`;
+  }
+}
+
+function initVCControls(){
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate()-7);
+  const iso = d => d.toISOString().slice(0,10);
+  if($("vc-start")) $("vc-start").value = iso(start);
+  if($("vc-end")) $("vc-end").value = iso(end);
+  $("vc-go")?.addEventListener("click", ()=>{
+    const s = $("vc-start")?.value;
+    const e = $("vc-end")?.value;
+    const loc = $("vc-loc")?.value;
+    if(!s || !e){ alert("Select start and end dates"); return; }
+    fetchVCHistory(s, e, loc);
+  });
+}
+
+
 async function refreshAll(){
   await Promise.allSettled([
     fetchOpenMeteo().catch(e=>console.warn(e)),
@@ -528,6 +653,7 @@ async function refreshAll(){
     fetchAQI().catch(e=>console.warn(e)),
     fetchTides().catch(e=>console.warn(e)),
     fetchKPHL().catch(e=>console.warn(e)),
+    fetchVCCurrent().catch(e=>console.warn(e)),
   ]);
   try{ fetchHydro(); }catch(e){}
   $("chip-sync") && ($("chip-sync").textContent="SYNC "+new Date().toLocaleTimeString("en-US",{hour12:false}));
@@ -550,22 +676,30 @@ function radarUrl(product, frame){
 }
 
 function setRadarFrame(idx){
+  if(!wxMap) return;
   radarFrameIdx = Math.max(0, Math.min(RADAR_FRAMES.length - 1, idx));
   const frame = RADAR_FRAMES[radarFrameIdx];
-  if(wxLayers.radar){
-    const next = L.tileLayer(radarUrl("radar", frame), { opacity: 0.7, maxZoom: 12, maxNativeZoom: 10 });
-    if(wxMap.hasLayer(wxLayers.radar)){
-      wxMap.removeLayer(wxLayers.radar);
-      next.addTo(wxMap);
-    }
-    wxLayers.radar = next;
+  const src = activeRadarSource === "eet" ? "eet" : (activeRadarSource === "mrms" ? "mrms" : "radar");
+  let url;
+  if(src === "eet"){
+    url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-eet${frame?"-"+frame:""}-900913/{z}/{x}/{y}.png`;
+  } else if(src === "mrms"){
+    // HSR live only (no simple mXXm path for all products)
+    url = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/q2-hsr-900913/{z}/{x}/{y}.png?t=${Date.now()}`;
+  } else {
+    url = radarUrl("radar", frame);
   }
-  const lab = $("radar-age");
-  if(lab) lab.textContent = frame ? frame.replace("m","") + " ago" : "LIVE";
+  if(wxLayers[src] && wxMap.hasLayer(wxLayers[src])) wxMap.removeLayer(wxLayers[src]);
+  wxLayers[src] = L.tileLayer(url, { opacity: 0.72, maxZoom: 12, maxNativeZoom: 10, attribution: "IEM OGC" });
+  if(activeRadarSource === src || activeRadarSource === "radar") wxLayers[src].addTo(wxMap);
+  const lab=$("radar-age");
+  if(lab) lab.textContent = frame ? frame.replace("m","")+" ago" : "LIVE";
 }
 
 const RADAR_TILES = {
   radar: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
+  eet: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-eet-900913/{z}/{x}/{y}.png",
+  mrms: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/q2-hsr-900913/{z}/{x}/{y}.png",
   velocity: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0v-900913/{z}/{x}/{y}.png",
   satellite: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes-ir-4km-900913/{z}/{x}/{y}.png",
   qpe: "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/q2-n1p-900913/{z}/{x}/{y}.png",
@@ -578,7 +712,7 @@ let rvFrameIdx = 0;
 let rvLayer = null;
 let rvPlaying = false;
 let rvTimer = null;
-let activeRadarSource = "global"; // global | radar (nexrad)
+let activeRadarSource = "radar"; // radar | global | eet | mrms
 
 async function loadRainViewerFrames(){
   try{
@@ -628,15 +762,18 @@ function setRainViewerFrame(idx){
 function showRadarSource(src){
   activeRadarSource = src;
   if(rvLayer && wxMap.hasLayer(rvLayer)) wxMap.removeLayer(rvLayer);
-  if(wxLayers.radar && wxMap.hasLayer(wxLayers.radar)) wxMap.removeLayer(wxLayers.radar);
+  ["radar","eet","mrms"].forEach(k=>{
+    if(wxLayers[k] && wxMap.hasLayer(wxLayers[k])) wxMap.removeLayer(wxLayers[k]);
+  });
   if(src === "global"){
     if(rvFrames.length) setRainViewerFrame(rvFrames.length - 1);
     else loadRainViewerFrames().then(ok => { if(ok) setRainViewerFrame(rvFrames.length-1); });
-  } else if(src === "radar"){
-    if(wxLayers.radar) wxLayers.radar.addTo(wxMap);
+  } else if(wxLayers[src]){
+    wxLayers[src].addTo(wxMap);
   }
-  document.querySelectorAll(".model-chip[data-layer=global],.model-chip[data-layer=radar]").forEach(c=>{
-    c.classList.toggle("on", c.dataset.layer === (src === "radar" ? "radar" : "global"));
+  const exclusive = ["global","radar","eet","mrms"];
+  document.querySelectorAll(".model-chip[data-layer]").forEach(c=>{
+    if(exclusive.includes(c.dataset.layer)) c.classList.toggle("on", c.dataset.layer === src);
   });
 }
 
@@ -714,15 +851,16 @@ function initWxMap(){
     { maxZoom: 16, maxNativeZoom: 16, opacity: 0.85 }
   ).addTo(wxMap);
 
-  wxLayers.radar = L.tileLayer(RADAR_TILES.radar, { opacity: 0.7, maxZoom: 12, maxNativeZoom: 10, attribution: "NEXRAD" });
-  wxLayers.velocity = L.tileLayer(RADAR_TILES.velocity, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10 });
-  wxLayers.satellite = L.tileLayer(RADAR_TILES.satellite, { opacity: 0.5, maxZoom: 12, maxNativeZoom: 10 });
-  wxLayers.qpe = L.tileLayer(RADAR_TILES.qpe, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10 });
-  // default: Global RainViewer; NEXRAD available as alternate
-  loadRainViewerFrames().then(ok=>{
-    if(ok){ activeRadarSource="global"; setRainViewerFrame(rvFrames.length-1); }
-    else { activeRadarSource="radar"; wxLayers.radar.addTo(wxMap); }
-  });
+  const iem = "IEM OGC · mesonet.agron.iastate.edu";
+  wxLayers.radar = L.tileLayer(RADAR_TILES.radar, { opacity: 0.72, maxZoom: 12, maxNativeZoom: 10, attribution: iem+" · n0q" });
+  wxLayers.eet = L.tileLayer(RADAR_TILES.eet, { opacity: 0.7, maxZoom: 12, maxNativeZoom: 10, attribution: iem+" · EET" });
+  wxLayers.mrms = L.tileLayer(RADAR_TILES.mrms, { opacity: 0.7, maxZoom: 12, maxNativeZoom: 10, attribution: iem+" · MRMS HSR" });
+  wxLayers.velocity = L.tileLayer(RADAR_TILES.velocity, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10, attribution: iem+" · vel" });
+  wxLayers.satellite = L.tileLayer(RADAR_TILES.satellite, { opacity: 0.5, maxZoom: 12, maxNativeZoom: 10, attribution: iem+" · GOES" });
+  wxLayers.qpe = L.tileLayer(RADAR_TILES.qpe, { opacity: 0.55, maxZoom: 12, maxNativeZoom: 10, attribution: iem+" · QPE" });
+  // Default map radar: US NEXRAD (IEM TMS)
+  activeRadarSource = "radar";
+  wxLayers.radar.addTo(wxMap);
   L.control.zoom({ position: "bottomleft" }).addTo(wxMap);
 
   sampleMarker = L.circleMarker([sampleLat, sampleLon], {
@@ -738,10 +876,8 @@ function initWxMap(){
   document.querySelectorAll(".model-chip[data-layer]").forEach(chip => {
     chip.addEventListener("click", () => {
       const key = chip.dataset.layer;
-      if(key==="global" || key==="radar"){
-        document.querySelectorAll(".model-chip[data-layer=global],.model-chip[data-layer=radar]").forEach(c=>c.classList.remove("on"));
-        chip.classList.add("on");
-        showRadarSource(key==="radar"?"radar":"global");
+      if(["global","radar","eet","mrms"].includes(key)){
+        showRadarSource(key);
         return;
       }
       document.querySelectorAll(".model-chip[data-layer]").forEach(c=>{
@@ -839,6 +975,7 @@ async function boot(){
     ]);
   }catch(e){ console.warn("refreshAll boot", e); }
   try{ initStorm3DControls(); }catch(e){ console.error(e); }
+  try{ initVCControls(); }catch(e){ console.error(e); }
   setTimeout(()=>{ try{ refreshStorm3DPane(); }catch(e){} }, 500);
   dismiss();
   setInterval(()=>{cd--;if(cd<=0){cd=CYCLE;refreshAll().catch(()=>{})}$("cd").textContent=cd},1000);
@@ -873,6 +1010,7 @@ function setSample(lat, lon, presetKey){
   refreshStorm3DPane();
   fetchPointConditions().catch(()=>{});
   fetchPointAlerts().catch(()=>{});
+  fetchVCCurrent().catch(()=>{});
 }
 
 
@@ -991,8 +1129,8 @@ async function buildStormClient(lat, lon){
     mode = nexrad ? "estimated" : "model";
   }
   const disc = nexrad
-    ? `US NEXRAD domain. Local max ~${radiusMi} mi (Open-Meteo + NWS). Not Level-II volume. Map can show Global (RainViewer) or US NEXRAD.`
-    : `Outside CONUS NEXRAD. 3D from Open-Meteo (~${radiusMi} mi). Map Global layer uses RainViewer worldwide composite where radars exist.`;
+    ? `US NEXRAD / IEM OGC domain (mesonet.agron.iastate.edu). Local max ~${radiusMi} mi via Open-Meteo + NWS. Map: n0q, EET, MRMS HSR TMS. 3D is estimated — not Level-II voxel.`
+    : `Outside CONUS NEXRAD. 3D from Open-Meteo (~${radiusMi} mi). Switch map to Global (RainViewer) for worldwide radar imagery.`;
   return{
     ok:true,
     mode,

@@ -1,10 +1,13 @@
 /**
- * WEATHERXPLR Storm 3D — Cloudflare Worker
- * Deploy: wrangler deploy (or paste into CF dashboard as module worker)
+ * WEATHERXPLR edge worker — Storm 3D heuristics + Visual Crossing proxy
  *
- * GET /?lat=40.08&lon=-75.30
- * Returns JSON storm-structure metrics for the Three.js panel.
- * Uses public Open-Meteo + NWS only (no Level-II decode).
+ * Routes:
+ *   GET /?lat=&lon=              → Storm 3D metrics (Open-Meteo + NWS)
+ *   GET /vc/current?lat=&lon=    → VC current (key from env VC_API_KEY)
+ *   GET /vc/history?lat=&lon=&start=&end=  or  ?location=&start=&end=
+ *
+ * Secrets (Cloudflare): VC_API_KEY
+ * Set via GitHub Actions from repository secret VC_API_KEY
  */
 
 const CORS = {
@@ -16,12 +19,22 @@ const CORS = {
 };
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: CORS });
     }
     try {
       const url = new URL(request.url);
+      const path = url.pathname.replace(/\/+$/, "") || "/";
+
+      if (path === "/vc/current" || path.endsWith("/vc/current")) {
+        return await handleVCCurrent(url, env);
+      }
+      if (path === "/vc/history" || path.endsWith("/vc/history")) {
+        return await handleVCHistory(url, env);
+      }
+
+      // default: storm 3d
       const lat = parseFloat(url.searchParams.get("lat") || "40.0759");
       const lon = parseFloat(url.searchParams.get("lon") || "-75.2996");
       if (Number.isNaN(lat) || Number.isNaN(lon)) {
@@ -39,6 +52,41 @@ function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: CORS });
 }
 
+async function handleVCCurrent(url, env) {
+  const key = env.VC_API_KEY;
+  if (!key) return json({ error: "VC_API_KEY not configured on worker" }, 503);
+  const lat = url.searchParams.get("lat");
+  const lon = url.searchParams.get("lon");
+  const location = url.searchParams.get("location");
+  const loc = location
+    ? location
+    : `${lat || "40.0759"},${lon || "-75.2996"}`;
+  const api = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${encodeURIComponent(loc)}?unitGroup=us&include=current&key=${encodeURIComponent(key)}&contentType=json`;
+  const r = await fetch(api);
+  const text = await r.text();
+  if (!r.ok) return json({ error: "VC upstream " + r.status, detail: text.slice(0, 200) }, r.status);
+  return new Response(text, { status: 200, headers: CORS });
+}
+
+async function handleVCHistory(url, env) {
+  const key = env.VC_API_KEY;
+  if (!key) return json({ error: "VC_API_KEY not configured on worker" }, 503);
+  const start = url.searchParams.get("start");
+  const end = url.searchParams.get("end");
+  if (!start || !end) return json({ error: "start and end required (YYYY-MM-DD)" }, 400);
+  const lat = url.searchParams.get("lat");
+  const lon = url.searchParams.get("lon");
+  const location = url.searchParams.get("location");
+  const loc = location
+    ? location
+    : `${lat || "40.0759"},${lon || "-75.2996"}`;
+  const api = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${encodeURIComponent(loc)}/${encodeURIComponent(start)}/${encodeURIComponent(end)}?unitGroup=us&include=days&key=${encodeURIComponent(key)}&contentType=json`;
+  const r = await fetch(api);
+  const text = await r.text();
+  if (!r.ok) return json({ error: "VC upstream " + r.status, detail: text.slice(0, 200) }, r.status);
+  return new Response(text, { status: 200, headers: { ...CORS, "Cache-Control": "public, max-age=300" } });
+}
+
 async function buildStorm(lat, lon) {
   const now = new Date();
   const [meteo, alerts] = await Promise.all([
@@ -52,7 +100,6 @@ async function buildStorm(lat, lon) {
   const gust = meteo.gust ?? 0;
   const hasTstorm = code >= 95 || (alerts.severe && alerts.severe.length > 0);
 
-  // Heuristic structure from public fields (NOT Level-II measured)
   let echoTop = 0;
   let maxDbz = 0;
   let maxDbzHt = 0;
@@ -78,7 +125,7 @@ async function buildStorm(lat, lon) {
     intensity = "moderate";
     maxDbz = 50 + Math.min(15, cape / 200);
     echoTop = 30000 + Math.min(20000, cape * 8);
-    maxDbzHt = 6000 + Math.min(12000, cape * 3);
+    maxDbzHt = 7000 + Math.min(10000, cape * 2);
     coreTop = echoTop * 0.65;
   }
   if (cape > 2500 || (alerts.severe && alerts.severe.some(a => /tornado/i.test(a.event)))) {
@@ -113,10 +160,7 @@ async function buildStorm(lat, lon) {
       gustMph: Math.round(gust),
     },
     alerts: alerts.severe || [],
-    source: {
-      meteo: "Open-Meteo",
-      alerts: "api.weather.gov",
-    },
+    source: { meteo: "Open-Meteo", alerts: "api.weather.gov" },
   };
 }
 
@@ -126,31 +170,25 @@ async function fetchMeteo(lat, lon) {
     `&current=precipitation,weather_code,wind_gusts_10m,cape` +
     `&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York`;
   try {
-    const r = await fetch(u, { cf: { cacheTtl: 120 } });
-    if (!r.ok) return {};
-    const j = await r.json();
+    const j = await fetch(u).then((r) => r.json());
     const c = j.current || {};
     return {
-      precip: c.precipitation,
-      weather_code: c.weather_code,
-      gust: c.wind_gusts_10m,
-      cape: c.cape,
+      precip: c.precipitation || 0,
+      weather_code: c.weather_code || 0,
+      gust: c.wind_gusts_10m || 0,
+      cape: c.cape || 0,
     };
-  } catch {
-    return {};
+  } catch (e) {
+    return { precip: 0, weather_code: 0, gust: 0, cape: 0 };
   }
 }
 
 async function fetchAlerts(lat, lon) {
-  // Point-based active alerts
-  const u = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
   try {
-    const r = await fetch(u, {
-      headers: { Accept: "application/geo+json", "User-Agent": "WeatherXplrStorm3D/1.0" },
-      cf: { cacheTtl: 60 },
-    });
-    if (!r.ok) return { severe: [] };
-    const j = await r.json();
+    const u = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
+    const j = await fetch(u, {
+      headers: { Accept: "application/geo+json", "User-Agent": "WeatherXplr-Worker/1.0" },
+    }).then((r) => r.json());
     const severe = (j.features || [])
       .map((f) => f.properties || {})
       .filter((p) => {
@@ -158,13 +196,9 @@ async function fetchAlerts(lat, lon) {
         return s === "extreme" || s === "severe" || /thunder|tornado|funnel|severe/i.test(p.event || "");
       })
       .slice(0, 5)
-      .map((p) => ({
-        event: p.event,
-        severity: p.severity,
-        headline: p.headline,
-      }));
+      .map((p) => ({ event: p.event, severity: p.severity, headline: p.headline }));
     return { severe };
-  } catch {
+  } catch (e) {
     return { severe: [] };
   }
 }
